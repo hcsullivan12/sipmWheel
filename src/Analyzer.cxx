@@ -23,11 +23,10 @@ void Analyzer::Handle(const unsigned& N0)
 
   // Variables used for incrementing
   // Start with r = 0, theta = 0, (N0 is what's passed) and increment by the constants defined above
-  float radius = 0;
-  float theta  = 0;
-  float attenuationLength = 5.0;
+  float radius(0);
+  float theta(0);
+  float attenuationLength(5.0);
 
-  //TThread::Lock();
   //std::cout << "N0: " << N0 << std::endl;
   while (attenuationLength <= 40)
   {
@@ -56,7 +55,7 @@ void Analyzer::Handle(const unsigned& N0)
   //std::cout << "ML " << p_likelihood << "  atten: " << p_attenuationLength << "  radius " << p_radius << "  theta " << p_theta << "  N0 " << p_N0 << std::endl;
 }
 
-void Analyzer::RunReco(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const Configuration& config)
+void Analyzer::RunReco(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const Configuration& config, const unsigned& trigger)
 {
   // Initialize
   p_thetaBinSize  = config.thetaBinSize;
@@ -66,14 +65,10 @@ void Analyzer::RunReco(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& si
   p_beta          = 360/config.nSiPMs;
   p_nSiPMs        = config.nSiPMs;
   p_likelihood    = std::numeric_limits<float>::lowest();
-
+  p_radius = 0; p_theta = 0; p_N0 = 0; p_attenuationLength = 0;
+  p_data.clear();
  
-  // Loop over different triggers
-  //for (unsigned trigger = 1; trigger <= sipmToTriggerMap.find(1)->second.size(); trigger++)
-  //{
-    WheelReco(sipmToTriggerMap, sipmInfoMap, 1);
-  //}
-
+  WheelReco(sipmToTriggerMap, sipmInfoMap, trigger);
 }
 
 void Analyzer::FillAccumulatorMap()
@@ -115,18 +110,14 @@ void Analyzer::FillAccumulatorMap()
 
 void Analyzer::WheelReco(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const unsigned& trigger)
 {
-   clock_t start = clock();
-
-  //sipm_errors = dr.GetSiPMCountErrors(); 
+  // Start the timer for this trigger
+  clock_t start = clock();
 
   // First to cound number of photons in each hit
   // also N0 set to lower threshold to decrease computation time
-  // and clear temp data vec for this trigger
-  p_data.clear();
   unsigned N0 = CountPhotons(sipmToTriggerMap, sipmInfoMap, trigger);
 
-  std::cout << "\nRunning MLE...\n" << std::endl;
-
+  std::cout << "\nRunning MLE for event " << trigger << "..." << std::endl;
   while ( N0 <= 1000 ) 
   {
     Handle(N0);
@@ -135,7 +126,7 @@ void Analyzer::WheelReco(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& 
  
   // We should have the ml now
   // Loop again and fill the accumulator map
-  // for const N0 and attenuation length
+  // for mle N0 and attenuation length
   FillAccumulatorMap(); 
 
   // Now find the maximum
@@ -146,8 +137,8 @@ void Analyzer::WheelReco(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& 
     if (p_accumulatorMap[index].second.find("likelihood")->second > max) { max = p_accumulatorMap[index].second.find("likelihood")->second; ID = index; } 
   }
  
-  std::cout << std::endl
-            << "Max likelihood = " << p_accumulatorMap[ID].second.find("likelihood")->second        << std::endl
+  //std::cout << std::endl
+  std::cout << "Max likelihood = " << p_accumulatorMap[ID].second.find("likelihood")->second        << std::endl
             << "Radius         = " << p_accumulatorMap[ID].second.find("radius")->second            << " cm\n"
             << "Theta          = " << p_accumulatorMap[ID].second.find("theta")->second             << " deg\n"
             << "N0             = " << p_accumulatorMap[ID].first                                    << " photons\n"
@@ -155,10 +146,9 @@ void Analyzer::WheelReco(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& 
  
   clock_t end = clock();
   double duration = ((double) (end - start)) / CLOCKS_PER_SEC;
-  std::cout << "\nRun time of " << duration << std::endl;
+  std::cout << "Run time of " << duration << " s" << std::endl;
 
-  // Add the parameters to our mle vec
-  //std::vector<float> temp = {p_accumulatorMap[ID].second[1], p_accumulatorMap[ID].second[2], p_accumulatorMap[ID].second[3]};
+  // Add these parameters to our mle vec
   p_mleParameters.emplace_back(p_accumulatorMap[ID].first, p_accumulatorMap[ID].second);
 }
 
@@ -175,7 +165,7 @@ unsigned Analyzer::CountPhotons(SiPMToTriggerMap& sipmToTriggerMap, const SiPMIn
     const float& thisBD   = sipmInfoMap.find(sipm.first)->second.breakdown;
     std::cout << "SiPM " << sipm.first << "  Gain = " << thisGain << "  Breakdown = " << thisBD << std::endl;
     unsigned max(0);
-    for (auto& hit : sipm.second[trigger])
+    for (auto& hit : sipm.second[trigger - 1])
     {
       //std::cout << hit.hitHeight << "  " << hit.bias << "  " << thisBD << "\n";
       hit.nPhotons = std::round(hit.hitHeight/( thisGain*( hit.bias - thisBD ) ));   // hit.bias - thisBD
@@ -186,7 +176,6 @@ unsigned Analyzer::CountPhotons(SiPMToTriggerMap& sipmToTriggerMap, const SiPMIn
     // Store max in the data vec 
     p_data.emplace(sipm.first, max);
   }
-
   return maxPhotons;
 }
 
@@ -215,7 +204,7 @@ float Analyzer::ComputeLambda(const float& r, const float& theta, const unsigned
     return 0;
   }
   const double r_m = TMath::Sqrt( r_mSquared );
-  const double lambda_m = N0*TMath::Exp( -r_m/attenuationLength );//(r_m);
+  const double lambda_m = N0*TMath::Exp( -r_m/attenuationLength )/(r_m);
 
   return lambda_m;
 }

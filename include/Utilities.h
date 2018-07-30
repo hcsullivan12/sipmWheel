@@ -46,6 +46,8 @@ using SiPMGains            = std::multimap<unsigned, float>;
 using SiPMInfoMap          = std::map<unsigned, SiPMInfo>;
 using BinIndex             = std::pair<unsigned, std::map<std::string, float>>;
 using AccumulatorMap       = std::vector<BinIndex>;  // N0, r, theta, likelihood
+using DataList             = std::list<std::map<unsigned, float>>;
+using AccumulatorMapList   = std::list<AccumulatorMap>;
 
 struct Configuration 
 {

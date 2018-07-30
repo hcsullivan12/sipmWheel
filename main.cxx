@@ -44,7 +44,8 @@ void Reco(const wheel::Configuration& myConfig);
 void RecordBiases(wheel::Configuration& config, const std::string& value);
 void RecordGains(std::map<unsigned, float>& map, const wheel::Configuration& config, const std::string& value);
 void FillSiPMInfo(wheel::SiPMInfoMap& sipmInfoMap, const wheel::Configuration& config);
-void MakeRecoPlots(wheel::Analyzer& analyzer, const wheel::Configuration& config);
+void MakeRecoPlots(wheel::Analyzer& analyzer, const wheel::Configuration& config, const unsigned& trigger);
+void OutputConfigInfo(wheel::Configuration& config);
 void SaveCharacterizationPlots(std::multimap<unsigned, std::vector<TH1D>>         ampDists,
                                std::multimap<unsigned, std::vector<TGraphErrors>> ampPeaks,
                                const wheel::Configuration&                        config);
@@ -64,12 +65,68 @@ int main(int argc, char **argv)
   myConfig.pathToConfig = argv[1];
   ReadConfigFile(myConfig);
 
+  OutputConfigInfo(myConfig);
+
   //const std::string process = argv[2];
   if      (myConfig.process == "characterize") Characterize(myConfig);
   else if (myConfig.process == "reco")         Reco(myConfig);
   else    { std::cout << "Error. Must choose characterize or reco.\n" << myConfig.process << std::endl; exit(1); }
 
   return 0;
+}
+
+void OutputConfigInfo(wheel::Configuration& config)
+{
+  // Hello there!
+  std::cout << std::setfill('-') << std::setw(80) << "-" << std::setfill(' ')  << std::endl;
+  std::cout << "     SiPM Wheel Characterization and Analysis Code      "      << std::endl;
+  std::cout << "         Author: Hunter Sullivan (UT Arlington)         "      << std::endl;
+  std::cout                                                                    << std::endl;
+  std::cout << "SiPM Wheel Configuration:\n";
+  if (config.process == "reco") {
+  std::cout << "Process             " << config.process                        << std::endl
+            << "PathToData          " << config.pathToData                     << std::endl
+            << "SaveWaveforms       " << config.saveWaveforms                  << std::endl
+            << "WaveformsFile       " << config.outputPath                     << std::endl
+            << "RecoOutputFile      " << config.recoOutputFile                 << std::endl
+            << "BaselineSubtract    " << config.baselineSubtract               << std::endl
+            << "SMARange            " << config.smaRange                       << std::endl
+            << "WaveformResolution  " << config.resolution                     << std::endl
+            << "HitSigmaThreshold   " << config.hitSigma                       << std::endl
+            << "HitFinderSearch     " << config.hitFinderSearch                << std::endl
+            << "MinimumHitAmp       " << config.minimumHitAmp                  << std::endl
+            << "NumerOfSiPMs        " << config.nSiPMs                         << std::endl
+            << "Biases              ";for(const auto& bias : config.biases)     std::cout << bias        << "  ";
+                                                                                std::cout << std::endl; std::cout 
+            << "Gains               ";for(const auto& sipm : config.gains)      std::cout << sipm.second << "  ";
+                                                                                std::cout << std::endl; std::cout  
+            << "Breakdowns          ";for(const auto& sipm : config.breakdowns) std::cout << sipm.second << "  ";
+                                                                                std::cout << std::endl; std::cout 
+            << "ThetaBinSize        " << config.thetaBinSize                   << std::endl
+            << "RadiusBinSize       " << config.radiusBinSize                  << std::endl
+            << "AttenLengthBinSize  " << config.attenuationLengthBinSize       << std::endl
+            << "DiskRadius          " << config.diskRadius                     << std::endl;
+  std::cout << std::setfill('-') << std::setw(80) << "-" << std::setfill(' ') << std::endl;
+  std::cout << std::endl;
+  return;
+  }
+  std::cout << "Process             " << config.process                        << std::endl
+            << "PathToData          " << config.pathToData                     << std::endl
+            << "OutputFile          " << config.characterizeOutputFile         << std::endl
+            << "SaveWaveforms       " << config.saveWaveforms                  << std::endl
+            << "WaveformsFile       " << config.outputPath                     << std::endl
+            << "BaselineSubtract    " << config.baselineSubtract               << std::endl
+            << "SMARange            " << config.smaRange                       << std::endl
+            << "WaveformResolution  " << config.resolution                     << std::endl
+            << "HitSigmaThreshold   " << config.hitSigma                       << std::endl
+            << "HitFinderSearch     " << config.hitFinderSearch                << std::endl
+            << "MinimumHitAmp       " << config.minimumHitAmp                  << std::endl
+            << "NumerOfSiPMs        " << config.nSiPMs                         << std::endl
+            << "AmpThreshold        " << config.characterizeAmpThr             << std::endl
+            << "AmpSigma            " << config.characterizeAmpSig             << std::endl
+            << "AmpFitRange         " << config.characterizeAmpFitRange        << std::endl;
+  std::cout << std::setfill('-') << std::setw(80) << "-" << std::setfill(' ') << std::endl;	
+  std::cout << std::endl;
 }
 
 void Reco(const wheel::Configuration& myConfig)
@@ -91,14 +148,28 @@ void Reco(const wheel::Configuration& myConfig)
   // Option to output graphs
   if (myConfig.saveWaveforms) SaveWaveforms(fr.GetGraphs(), fr.GetMarkers(), myConfig);
 
-  // Start the main work horse after filling sipm info
+  // Fill the sipm info first
   wheel::SiPMInfoMap sipmInfoMap;
   FillSiPMInfo(sipmInfoMap, myConfig);
-  wheel::Analyzer analyzer;
-  analyzer.RunReco(sipmToTriggerMap, sipmInfoMap, myConfig);
 
-  // Now make the plots
-  MakeRecoPlots(analyzer, myConfig);
+  // Start the main work horse after filling sipm info
+  // To reduce overhead, run reco and make plots before looping
+  // Make sure there is the same amount of data for each sipm
+  const unsigned& nFiles = sipmToTriggerMap.find(1)->second.size();
+  for (const auto& sipm : sipmToTriggerMap)
+  {
+    if (sipm.second.size() != nFiles) { std::cout << "Error. Different data sizes for SiPMs\n" << std::endl; exit(1); }
+  }
+  // Loop over the triggers
+  for (unsigned trigger = 1; trigger <= sipmToTriggerMap.find(1)->second.size(); trigger++)
+  {
+    std::cout << std::setfill('*') << std::setw(80) << "-" << std::setfill(' ')  << std::endl; 
+    std::cout << "\nInitializing event " << trigger << "..." << std::endl;
+    wheel::Analyzer analyzer;
+    analyzer.RunReco(sipmToTriggerMap, sipmInfoMap, myConfig, trigger);
+    // Now make the plots
+    MakeRecoPlots(analyzer, myConfig, trigger);
+  }
 }
 
 void Characterize(const wheel::Configuration& myConfig)
@@ -392,14 +463,15 @@ Double_t disk(Double_t* x, Double_t* par)
   return f;
 }
 
-void MakeRecoPlots(wheel::Analyzer& analyzer, const wheel::Configuration& config)
+void MakeRecoPlots(wheel::Analyzer& analyzer, const wheel::Configuration& config, const unsigned& trigger)
 {
   // Get the maps needed for the plots
   auto accumulatorMap = analyzer.GetAccumulatorMap();
   auto mleParameters  = analyzer.GetMLEParameters();
 
   // Make the comparison plot 
-  TCanvas c1("data_mle", "data_mle", 1000, 1000);
+  std::string name = "data_mle_trigger" + std::to_string(trigger);
+  TCanvas c1(name.c_str(), name.c_str(), 1000, 1000);
   // Get the counts lambda_m using the mlestimates for r, theta, and N0
   std::vector<unsigned> prediction;
   prediction.reserve(config.nSiPMs);
@@ -410,11 +482,13 @@ void MakeRecoPlots(wheel::Analyzer& analyzer, const wheel::Configuration& config
     prediction[m - 1] = static_cast<unsigned>(lambda_m);
   }
 
-  TH1D pred("pred", "pred", config.nSiPMs, 0, config.nSiPMs);
+  name = "pred_trigger" + std::to_string(trigger);
+  TH1D pred(name.c_str(), name.c_str(), config.nSiPMs, 0, config.nSiPMs);
   std::cout << std::endl;
+  std::cout << "Bin comparison:\n";
   for (int posBin = 1; posBin <= config.nSiPMs; posBin++) 
   {
-    std::cout << "Pred Bin " << posBin << " :  " << prediction[posBin - 1] << std::endl;
+    std::cout << "Pred Bin " << posBin << " :  " << prediction[posBin - 1] << " p.e." << std::endl;
     pred.SetBinContent( posBin, prediction[posBin - 1] );
   }
 
@@ -430,10 +504,11 @@ void MakeRecoPlots(wheel::Analyzer& analyzer, const wheel::Configuration& config
   pred.SetMinimum(0);
   pred.Draw();
 
-  TH1D dataHisto("dataHisto", "dataHisto", config.nSiPMs, 0, config.nSiPMs);
+  name = "dataHisto_trigger" + std::to_string(trigger);
+  TH1D dataHisto(name.c_str(), name.c_str(), config.nSiPMs, 0, config.nSiPMs);
   for (int posBin = 1; posBin <= config.nSiPMs; posBin++) 
   {
-    std::cout << "Data Bin " << posBin << " :  " << analyzer.GetData().find(posBin)->second << std::endl;
+    std::cout << "Data Bin " << posBin << " :  " << analyzer.GetData().find(posBin)->second << " p.e." << std::endl;
     dataHisto.SetBinContent( posBin, analyzer.GetData().find(posBin)->second );
   }
   dataHisto.SetMarkerStyle(21);
@@ -445,9 +520,9 @@ void MakeRecoPlots(wheel::Analyzer& analyzer, const wheel::Configuration& config
   leg.AddEntry(&dataHisto, "Data", "p");
   leg.Draw("same");
 
- 
   // Make the reco plot
-  TCanvas c2("reco", "reco", 1000, 1000);
+  name = "reco_trigger" + std::to_string(trigger);
+  TCanvas c2(name.c_str(), name.c_str(), 1000, 1000);
   TF2 fDisk("fDisk", disk, -2*config.diskRadius, 2*config.diskRadius, -2*config.diskRadius, 2*config.diskRadius, 0);
   fDisk.SetContour(1);
   fDisk.SetContourLevel(0, config.diskRadius*config.diskRadius);
@@ -499,7 +574,8 @@ void MakeRecoPlots(wheel::Analyzer& analyzer, const wheel::Configuration& config
   line3.Draw("same"); 
 
   // Now I want to draw a likelihood heat map 
-  TCanvas c3("heatMap", "Likelihood Heat Map", 800, 800);
+  name = "heatMap_trigger" + std::to_string(trigger);
+  TCanvas c3(name.c_str(), "Likelihood Heat Map", 800, 800);
   unsigned rBins     = config.diskRadius/config.radiusBinSize;
   unsigned thetaBins = 360/config.thetaBinSize;
   
@@ -558,8 +634,8 @@ void MakeRecoPlots(wheel::Analyzer& analyzer, const wheel::Configuration& config
   m.Draw("same");*/
 
   // Write these to a file
-  std::cout << "\nWriting reco output file... \n" << std::endl;
-  TFile f(config.recoOutputFile.c_str(), "RECREATE");
+  std::cout << "\nSaving plots to reco output file... \n" << std::endl;
+  TFile f(config.recoOutputFile.c_str(), "UPDATE");
   c1.Write();
   c2.Write();
   c3.Write();

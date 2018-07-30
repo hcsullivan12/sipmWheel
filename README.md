@@ -33,3 +33,5 @@ cmake ..
 make
 ./sipmwheel <path_to_config_file>
 ```
+
+Note: The Reco plots are updated throughout the algorithm. So if you're starting a new run, make sure to delete it!

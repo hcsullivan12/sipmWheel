@@ -30,6 +30,8 @@ void FileReader::ReadFiles(SiPMToTriggerMap& sipmToTriggerMap, const SiPMToBiasT
     {
       if (config.biases.size() != sipm.second.size()) { std::cout << "Error. The files do not match the biases listed in config.\n"; std::cout << std::endl; exit(1); } 
     }
+
+    std::cout << "\nFinding hits for SiPM " << sipm.first << "..." << std::endl;
     std::vector<HitCandidateVec> triggerList;
     unsigned totalSize = 0;
     for (const auto& bias : sipm.second) totalSize += bias.second.size();
@@ -38,9 +40,14 @@ void FileReader::ReadFiles(SiPMToTriggerMap& sipmToTriggerMap, const SiPMToBiasT
     // Loop over the biases for this sipm
     for (const auto& bias : sipm.second)
     {
+      std::cout << "Bias = " << bias.first << "\n";
+      unsigned counter = 0;
       // Loop over the files for this bias and sipm
       for (const auto& file : bias.second)
       {
+        if (counter % 50 == 0) std::cout << "Trigger #" << counter << std::endl;
+        counter++;
+        if (counter > 100) break;
         // Create a temp hitVec
         HitCandidateVec hitCandVec;
         // Now read this file
@@ -155,7 +162,7 @@ void FileReader::ReadFile(HitCandidateVec& hitCandidateVec, const std::string& f
     waveforms.push_back(g);
   }
 
-  std::cout << "Found: " << hitCandVec.size() << " hits. " << std::endl;
+  //std::cout << "Found: " << hitCandVec.size() << " hits. " << std::endl;
   // Append
   hitCandidateVec.insert(hitCandidateVec.end(), hitCandVec.begin(), hitCandVec.end());
 
