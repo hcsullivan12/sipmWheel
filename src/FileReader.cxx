@@ -47,7 +47,7 @@ void FileReader::ReadFiles(SiPMToTriggerMap& sipmToTriggerMap, const SiPMToBiasT
       {
         if (counter % 50 == 0) std::cout << "Trigger #" << counter << std::endl;
         counter++;
-        if (counter > 100) break;
+        if (counter > 150) break;
         // Create a temp hitVec
         HitCandidateVec hitCandVec;
         // Now read this file

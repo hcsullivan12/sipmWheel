@@ -174,6 +174,9 @@ void Reco(const wheel::Configuration& myConfig)
 
 void Characterize(const wheel::Configuration& myConfig)
 {
+  // Start a timer
+  clock_t start = clock();
+
   // First we need to get the files to read data from
   std::cout << "Getting the files from: " << myConfig.pathToData << std::endl;
   wheel::SiPMToBiasTriggerMap sipmToBiasTriggerMap;
@@ -197,6 +200,10 @@ void Characterize(const wheel::Configuration& myConfig)
 
   // Save the plots
   SaveCharacterizationPlots(ch.GetAmpDists(), ch.GetAmpPeaks(), myConfig);
+
+  clock_t end = clock();
+  double duration = ((double) (end - start)) / CLOCKS_PER_SEC;
+  std::cout << "Run time of " << duration << " s" << std::endl;
 }
 
 void FillSiPMInfo(wheel::SiPMInfoMap& sipmInfoMap, const wheel::Configuration& config)
@@ -395,7 +402,8 @@ void SaveCharacterizationPlots(std::multimap<unsigned, std::vector<TH1D>>       
   masterGainPlot.Divide(config.nBiases,config.nSiPMs);
 
   // Loop over sipms
-  unsigned counter(1);
+  unsigned ampCounter(1);
+  unsigned gainCounter(1);
   for (unsigned sipm = 1; sipm <= config.nSiPMs; sipm++)
   {
     // Get the dists for this sipm
@@ -404,20 +412,19 @@ void SaveCharacterizationPlots(std::multimap<unsigned, std::vector<TH1D>>       
     for (auto& dist : ampDists.find(sipm)->second)
     {
       // Amplitude dist
-      masterAmpDist.cd(counter);
+      masterAmpDist.cd(ampCounter);
       gStyle->SetOptStat(0);
       dist.Draw("apl");      
-      counter++;
+      ampCounter++;
     }
-    counter = 1;
     for (auto& peaks : ampPeaks.find(sipm)->second)
     {
       // Gain
-      masterGainPlot.cd(counter);
+      masterGainPlot.cd(gainCounter);
       peaks.SetMarkerStyle(20);
       peaks.SetMarkerColor(1);
       peaks.Draw("AP");
-      counter++;
+      gainCounter++;
       peaks.GetXaxis()->SetLimits(0, 5);
       peaks.SetMinimum(0);      
     }

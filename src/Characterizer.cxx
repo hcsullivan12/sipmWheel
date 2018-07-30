@@ -51,9 +51,11 @@ void Characterizer::Characterize(SiPMInfoMap& sipmInfoMap, const SiPMToTriggerMa
     std::vector<TGraphErrors> g;
     g.reserve(ampDists.find(sipm.first)->second.size());
     ampPeaks.emplace(sipm.first, g);
+    unsigned biasCounter = 0;
     for (auto& ampDist : ampDists.find(sipm.first)->second)
     {
-      ampPeaks.find(sipm.first)->second.emplace_back(FitGain(ampDist, sipm.first, sipmGains, config));
+      ampPeaks.find(sipm.first)->second.emplace_back(FitGain(ampDist, sipm.first, sipmGains, biasCounter, config));
+      biasCounter++;
       /*masterGainPlot.cd(gainCounter);
       ampPeaks.SetMarkerStyle(20);
       ampPeaks.SetMarkerColor(1);
@@ -91,7 +93,7 @@ void Characterizer::Characterize(SiPMInfoMap& sipmInfoMap, const SiPMToTriggerMa
     g1.SetMaximum( 1.1*(*std::max_element(gains.begin(), gains.end())) );
     g1.SetMarkerStyle(20);
     g1.SetMarkerSize(2);
-    g1.Draw("AP");
+    //g1.Draw("AP");
 
     // Fit for bias plot
     TF1 fit1("fit1", "[0] + [1]*x", *std::min_element(biases.begin(), biases.end()), *std::max_element(biases.begin(), biases.end()));
@@ -121,7 +123,7 @@ void Characterizer::Characterize(SiPMInfoMap& sipmInfoMap, const SiPMToTriggerMa
     g2.SetMaximum(4);
     g2.SetMarkerStyle(24);
     g2.SetMarkerSize(2);
-    g2.Draw("AP");
+    //g2.Draw("AP");
 
     ///Fit for overvoltage plot
     TF1 fit2("fit2", "[0] + [1]*x", 0, 4);
@@ -132,7 +134,7 @@ void Characterizer::Characterize(SiPMInfoMap& sipmInfoMap, const SiPMToTriggerMa
 
     //std::cout << fit2->GetParError(0) << "   " << fit2->GetParError(1) <<  std::endl;
     //for (unsigned i = 0; i < nFiles; i++) std::cout << "Gain " << i + 1 << " = " << gains[i] << std::endl;
-    std::cout << "Gain is... " << std::setprecision(3) << fit2.GetParameter(1) << " mV/p.e./O.V.\n\n";
+    std::cout << "Gain is... " << std::setprecision(3) << fit2.GetParameter(1) << " mV/p.e./O.V.\n";
 
    /* ///Place the quantities on plot
     std::string bd = std::to_string(breakdown);
@@ -196,7 +198,7 @@ void Characterizer::MakeHistograms(const unsigned& sipm, const std::vector<HitCa
   unsigned index = 0;
   for (auto& dist : ampDists.find(sipm)->second)
   {
-    dist.SetBins(1000, xMin[index], xMax[index]);
+    dist.SetBins(500, xMin[index], xMax[index]);
     index++;
   }
 
@@ -213,7 +215,7 @@ void Characterizer::MakeHistograms(const unsigned& sipm, const std::vector<HitCa
   }
 }
 
-TGraphErrors Characterizer::FitGain(TH1D& hs, const unsigned& sipm, SiPMGains& sipmGains, const Configuration& config)
+TGraphErrors Characterizer::FitGain(TH1D& hs, const unsigned& sipm, SiPMGains& sipmGains, const unsigned& nBias, const Configuration& config)
 {
   Float_t gain=0;
   TSpectrum s(3);
@@ -272,7 +274,8 @@ TGraphErrors Characterizer::FitGain(TH1D& hs, const unsigned& sipm, SiPMGains& s
   }
 
   TGraphErrors grpeaks(npeaks,gx,gy,0,gey);
-  grpeaks.SetTitle("SiPM Gain from Amplitude Distribution");
+  std::string name = "SiPM " + std::to_string(sipm) + " Gain from " + std::to_string(*std::next(config.biases.begin(), nBias));
+  grpeaks.SetTitle(name.c_str());
   grpeaks.GetYaxis()->SetTitle("Amplitude/Volts");
   
   grpeaks.GetYaxis()->SetTitleOffset(1.4);

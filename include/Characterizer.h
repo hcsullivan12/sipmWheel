@@ -33,7 +33,7 @@ public:
 private:
 
   void         MakeHistograms(const unsigned& sipm, const std::vector<HitCandidateVec>& hitCandVec, const Configuration& config);
-  TGraphErrors FitGain(TH1D& hs, const unsigned& sipm, SiPMGains& sipmGains, const Configuration& config);
+  TGraphErrors FitGain(TH1D& hs, const unsigned& sipm, SiPMGains& sipmGains, const unsigned& nBias, const Configuration& config);
 
   std::multimap<unsigned, std::vector<TH1D>> ampDists;
   std::multimap<unsigned, std::vector<TGraphErrors>> ampPeaks;
