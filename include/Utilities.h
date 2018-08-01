@@ -34,6 +34,7 @@ struct SiPMInfo
 {
   float    gain;
   float    breakdown;
+  float    bias;
 };
 
 

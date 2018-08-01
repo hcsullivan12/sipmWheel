@@ -117,7 +117,7 @@ void Analyzer::WheelReco(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& 
   // also N0 set to lower threshold to decrease computation time
   unsigned N0 = CountPhotons(sipmToTriggerMap, sipmInfoMap, trigger);
 
-  std::cout << "\nRunning MLE for event " << trigger << "..." << std::endl;
+  std::cout << "Running MLE...\n";
   while ( N0 <= 1000 ) 
   {
     Handle(N0);
@@ -163,9 +163,8 @@ unsigned Analyzer::CountPhotons(SiPMToTriggerMap& sipmToTriggerMap, const SiPMIn
     // Get the gain and bdown for this sipm
     const float& thisGain = sipmInfoMap.find(sipm.first)->second.gain;
     const float& thisBD   = sipmInfoMap.find(sipm.first)->second.breakdown;
-    std::cout << "SiPM " << sipm.first << "  Gain = " << thisGain << "  Breakdown = " << thisBD << std::endl;
     unsigned max(0);
-    for (auto& hit : sipm.second[trigger - 1])
+    for (auto& hit : sipm.second[0])
     {
       //std::cout << hit.hitHeight << "  " << hit.bias << "  " << thisBD << "\n";
       hit.nPhotons = std::round(hit.hitHeight/( thisGain*( hit.bias - thisBD ) ));   // hit.bias - thisBD

@@ -23,9 +23,18 @@ class FileReader {
 public:
   FileReader();
   ~FileReader();
-  
-  void ReadFiles(SiPMToTriggerMap& sipmToTriggerMap, const SiPMToFilesMap& map, const wheel::Configuration& config);
-  void ReadFiles(SiPMToTriggerMap& sipmToTriggerMap, const BiasToFileMap& biasMap, const unsigned& sipm, const wheel::Configuration& config);
+
+  // For reco  
+  void ReadFiles(SiPMToTriggerMap&           sipmToTriggerMap, 
+                 const SiPMToFilesMap&       map, 
+                 const unsigned&             trigger, 
+                 const SiPMInfoMap&          sipmInfoMap, 
+                 const wheel::Configuration& config);
+  // For characterization
+  void ReadFiles(SiPMToTriggerMap&           sipmToTriggerMap, 
+                 const BiasToFileMap&        biasMap, 
+                 const unsigned&             sipm, 
+                 const wheel::Configuration& config);
 
 
   std::vector<TGraph>&               GetGraphs()  { return waveforms; }

@@ -132,42 +132,50 @@ void OutputConfigInfo(wheel::Configuration& config)
 
 void Reco(const wheel::Configuration& myConfig)
 {
+  // Fill the sipm info first
+  wheel::SiPMInfoMap sipmInfoMap;
+  FillSiPMInfo(sipmInfoMap, myConfig);
+
+  std::cout << "SiPM Information: \n";
+  for (const auto& sipm : sipmInfoMap)
+  {
+    std::cout << "SiPM " << sipm.first << "  Bias = " << sipm.second.bias << "  Gain = " << sipm.second.gain << "  Breakdown = " << sipm.second.breakdown << std::endl;
+  }
+
   // First we need to get the files to read data from
   std::cout << "\nGetting the files from: " << myConfig.pathToData << std::endl;
   wheel::SiPMToFilesMap sipmToFilesMap;
   GetTheFiles(sipmToFilesMap, myConfig);
 
-  // Option to print the collected files
-  if (myConfig.printFiles) PrintTheFiles(sipmToFilesMap);
-
-  // Now read the files
-  std::cout << "\nReading the files... " << std::endl;
-  wheel::SiPMToTriggerMap sipmToTriggerMap;
-  wheel::FileReader fr;
-  fr.ReadFiles(sipmToTriggerMap, sipmToFilesMap, myConfig);
- 
-  // Option to output graphs
-  if (myConfig.saveWaveforms) SaveWaveforms(fr.GetGraphs(), fr.GetMarkers(), myConfig);
-
-  // Fill the sipm info first
-  wheel::SiPMInfoMap sipmInfoMap;
-  FillSiPMInfo(sipmInfoMap, myConfig);
-
-  // Start the main work horse after filling sipm info
-  // To reduce overhead, run reco and make plots through each iteration
   // Make sure there is the same amount of data for each sipm
-  const unsigned& nFiles = sipmToTriggerMap.find(1)->second.size();
-  for (const auto& sipm : sipmToTriggerMap)
+  const unsigned& nFiles = sipmToFilesMap.find(1)->second.size();
+  for (const auto& sipm : sipmToFilesMap)
   {
     if (sipm.second.size() != nFiles) { std::cout << "Error. Different data sizes for SiPMs\n" << std::endl; exit(1); }
   }
-  // Loop over the triggers
-  // **Temporary** find average likelihood dist
-  wheel::AccumulatorMap avgMLEParams;
-  for (unsigned trigger = 1; trigger <= 50/*sipmToTriggerMap.find(1)->second.size()*/; trigger++)
+
+  // Option to print the collected files
+  if (myConfig.printFiles) PrintTheFiles(sipmToFilesMap);
+
+  // Main workhourse here
+  // Start reco
+  for (unsigned trigger = 1; trigger <= nFiles; trigger++)
   {
-    std::cout << std::setfill('*') << std::setw(80) << "-" << std::setfill(' ')  << std::endl; 
+    std::cout << "\n" << std::setfill('*') << std::setw(80) << "-" << std::setfill(' ')  << std::endl; 
     std::cout << "\nInitializing event " << trigger << "..." << std::endl;
+    // Now read the files
+    std::cout << "Reading the files... " << std::endl;
+    wheel::SiPMToTriggerMap sipmToTriggerMap;
+    wheel::FileReader fr;
+    fr.ReadFiles(sipmToTriggerMap, sipmToFilesMap, trigger, sipmInfoMap, myConfig);
+    // Make sure we just have 1 file/sipm here
+    for (const auto& sipm : sipmToTriggerMap)
+    {
+      if (sipm.second.size() != 1) { std::cout << "Error. There is not 1 file specified for each sipm\n." << std::endl; exit(1); }
+    } 
+    // Option to output a few waveforms
+    if (myConfig.saveWaveforms && trigger == 1) SaveWaveforms(fr.GetGraphs(), fr.GetMarkers(), myConfig);
+  
     wheel::Analyzer analyzer;
     analyzer.RunReco(sipmToTriggerMap, sipmInfoMap, myConfig, trigger);
     // Now make the plots
@@ -217,6 +225,7 @@ void FillSiPMInfo(wheel::SiPMInfoMap& sipmInfoMap, const wheel::Configuration& c
     wheel::SiPMInfo sipmInfo;
     sipmInfo.gain      = config.gains.find(sipm)->second;
     sipmInfo.breakdown = config.breakdowns.find(sipm)->second; 
+    sipmInfo.bias      = *config.biases.begin();
 
     sipmInfoMap.emplace(sipm, sipmInfo);
   }
@@ -352,8 +361,7 @@ void GetTheFiles(wheel::SiPMToFilesMap& map, const wheel::Configuration& config)
       const float thisBias = std::stof(bias);
 
       if (thisBias != *config.biases.begin()) continue;
-      std::cout << "Bias chosen for SiPM " << sipm << " is " << thisBias << std::endl;
-
+      
       // Loop over files?
       //std::set<std::string> files;
       for (const auto& fileIter : stdfs::directory_iterator(biasDirIter.path().c_str()))
@@ -448,7 +456,7 @@ void SaveCharacterizationPlots(std::map<unsigned, std::vector<TH1D>>         amp
 
 void SaveWaveforms(std::vector<TGraph>& graphs, std::vector<std::vector<TMarker>>& markers, const wheel::Configuration& config)
 {
-  std::cout << "\nOutputing waveforms... \n" << std::endl;
+  std::cout << "Outputing waveforms... " << std::endl;
   // Create a file to write to
   TFile f(config.outputPath.c_str(), "RECREATE");
   
@@ -500,15 +508,11 @@ void MakeRecoPlots(wheel::Analyzer& analyzer, const wheel::Configuration& config
   }
 
   name = "pred_trigger" + std::to_string(trigger);
-  TH1D pred(name.c_str(), name.c_str(), config.nSiPMs, 0, config.nSiPMs);
-  std::cout << std::endl;
-  std::cout << "Bin comparison:\n";
+  TH1D pred(name.c_str(), name.c_str(), config.nSiPMs, 0, config.nSiPMs); 
   for (int posBin = 1; posBin <= config.nSiPMs; posBin++) 
   {
-    std::cout << "Pred Bin " << posBin << " :  " << prediction[posBin - 1] << " p.e." << std::endl;
     pred.SetBinContent( posBin, prediction[posBin - 1] );
   }
-
   pred.SetFillStyle(3001);
   pred.SetFillColor(kRed);
   pred.SetLineWidth(3);
@@ -523,9 +527,10 @@ void MakeRecoPlots(wheel::Analyzer& analyzer, const wheel::Configuration& config
 
   name = "dataHisto_trigger" + std::to_string(trigger);
   TH1D dataHisto(name.c_str(), name.c_str(), config.nSiPMs, 0, config.nSiPMs);
+  std::cout << "\nBin comparison:\n";
   for (int posBin = 1; posBin <= config.nSiPMs; posBin++) 
   {
-    std::cout << "Data Bin " << posBin << " :  " << analyzer.GetData().find(posBin)->second << " p.e." << std::endl;
+    std::cout << "Data Bin " << posBin << " :  " << analyzer.GetData().find(posBin)->second << " p.e." << "   Pred Bin " << posBin << " :  " << prediction[posBin - 1] << " p.e." << std::endl;
     dataHisto.SetBinContent( posBin, analyzer.GetData().find(posBin)->second );
   }
   dataHisto.SetMarkerStyle(21);
@@ -651,7 +656,7 @@ void MakeRecoPlots(wheel::Analyzer& analyzer, const wheel::Configuration& config
   m.Draw("same");*/
 
   // Write these to a file
-  std::cout << "\nSaving plots to reco output file... \n" << std::endl;
+  std::cout << "\nSaving plots to reco output file... " << std::endl;
   TFile f(config.recoOutputFile.c_str(), "UPDATE");
   c1.Write();
   c2.Write();
