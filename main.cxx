@@ -46,9 +46,9 @@ void RecordGains(std::map<unsigned, float>& map, const wheel::Configuration& con
 void FillSiPMInfo(wheel::SiPMInfoMap& sipmInfoMap, const wheel::Configuration& config);
 void MakeRecoPlots(wheel::Analyzer& analyzer, const wheel::Configuration& config, const unsigned& trigger);
 void OutputConfigInfo(wheel::Configuration& config);
-void SaveCharacterizationPlots(std::multimap<unsigned, std::vector<TH1D>>         ampDists,
-                               std::multimap<unsigned, std::vector<TGraphErrors>> ampPeaks,
-                               const wheel::Configuration&                        config);
+void SaveCharacterizationPlots(std::map<unsigned, std::vector<TH1D>>         ampDists,
+                               std::map<unsigned, std::vector<TGraphErrors>> ampPeaks,
+                               const wheel::Configuration&                   config);
 
 int main(int argc, char **argv)
 {
@@ -113,6 +113,7 @@ void OutputConfigInfo(wheel::Configuration& config)
   std::cout << "Process             " << config.process                        << std::endl
             << "PathToData          " << config.pathToData                     << std::endl
             << "OutputFile          " << config.characterizeOutputFile         << std::endl
+            << "NumberOfFiles       " << config.nFilesCharacterize             << std::endl
             << "SaveWaveforms       " << config.saveWaveforms                  << std::endl
             << "WaveformsFile       " << config.outputPath                     << std::endl
             << "BaselineSubtract    " << config.baselineSubtract               << std::endl
@@ -153,7 +154,7 @@ void Reco(const wheel::Configuration& myConfig)
   FillSiPMInfo(sipmInfoMap, myConfig);
 
   // Start the main work horse after filling sipm info
-  // To reduce overhead, run reco and make plots before looping
+  // To reduce overhead, run reco and make plots through each iteration
   // Make sure there is the same amount of data for each sipm
   const unsigned& nFiles = sipmToTriggerMap.find(1)->second.size();
   for (const auto& sipm : sipmToTriggerMap)
@@ -161,7 +162,9 @@ void Reco(const wheel::Configuration& myConfig)
     if (sipm.second.size() != nFiles) { std::cout << "Error. Different data sizes for SiPMs\n" << std::endl; exit(1); }
   }
   // Loop over the triggers
-  for (unsigned trigger = 1; trigger <= sipmToTriggerMap.find(1)->second.size(); trigger++)
+  // **Temporary** find average likelihood dist
+  wheel::AccumulatorMap avgMLEParams;
+  for (unsigned trigger = 1; trigger <= 50/*sipmToTriggerMap.find(1)->second.size()*/; trigger++)
   {
     std::cout << std::setfill('*') << std::setw(80) << "-" << std::setfill(' ')  << std::endl; 
     std::cout << "\nInitializing event " << trigger << "..." << std::endl;
@@ -181,23 +184,23 @@ void Characterize(const wheel::Configuration& myConfig)
   std::cout << "Getting the files from: " << myConfig.pathToData << std::endl;
   wheel::SiPMToBiasTriggerMap sipmToBiasTriggerMap;
   GetTheCharacterizationFiles(sipmToBiasTriggerMap, myConfig);
-
   // Option to print the collected files
   if (myConfig.printFiles) PrintTheFiles(sipmToBiasTriggerMap);
-
   // Now read the files
   std::cout << "Reading the files... " << std::endl;
-  wheel::SiPMToTriggerMap sipmToTriggerMap;
-  wheel::FileReader fr;
-  fr.ReadFiles(sipmToTriggerMap, sipmToBiasTriggerMap, myConfig);
- 
-  // Option to output graphs
-  if (myConfig.saveWaveforms) SaveWaveforms(fr.GetGraphs(), fr.GetMarkers(), myConfig);
-
+  // Loop over the sipms
   wheel::Characterizer ch;
-  wheel::SiPMInfoMap sipmInfoMap;
-  ch.Characterize(sipmInfoMap, sipmToTriggerMap, myConfig);
-
+  for (auto& sipm : sipmToBiasTriggerMap)
+  {
+    wheel::SiPMToTriggerMap sipmToTriggerMap;
+    wheel::FileReader fr;
+    fr.ReadFiles(sipmToTriggerMap, sipm.second, sipm.first, myConfig);
+    // Option to output graphs
+    if (myConfig.saveWaveforms) SaveWaveforms(fr.GetGraphs(), fr.GetMarkers(), myConfig);
+    // Characterize
+    wheel::SiPMInfoMap sipmInfoMap;
+    ch.Characterize(sipmInfoMap, sipmToTriggerMap, myConfig);
+  }
   // Save the plots
   SaveCharacterizationPlots(ch.GetAmpDists(), ch.GetAmpPeaks(), myConfig);
 
@@ -250,6 +253,7 @@ void ReadConfigFile(wheel::Configuration& config)
     else if (header == "characterizeAmpSig")      config.characterizeAmpSig      = std::stof(value);
     else if (header == "characterizeAmpFitRange") config.characterizeAmpFitRange = std::stof(value);
     else if (header == "characterizeOutputFile")  config.characterizeOutputFile  = value;
+    else if (header == "nFilesCharacterize")      config.nFilesCharacterize      = std::stoi(value);
     else if (header == "nBiases")                 config.nBiases                 = std::stoi(value);
     else if (header == "biases")                  RecordBiases(config, value); 
     else if (header == "gains")                   RecordGains(config.gains, config, value);
@@ -265,6 +269,7 @@ void ReadConfigFile(wheel::Configuration& config)
   if (config.nBiases != config.biases.size())     { std::cout << "Error. Number of biases does not match in config.\n" << std::endl; exit(1); }
   if (config.nSiPMs  != config.gains.size())      { std::cout << "Error. Number of gains does not match number of SiPMs\n." << std::endl; exit(1); }
   if (config.nSiPMs  != config.breakdowns.size()) { std::cout << "Error. Number of breakdowns does not match number of SiPMs\n." << std::endl; exit(1); }
+  if (config.process == "reco" && config.biases.size() != 1) { std::cout << "Error. Can only specify one bias for reconstruction\n." << std::endl; exit(1); }
 }
 
 void RecordGains(std::map<unsigned, float>& map, const wheel::Configuration& config, const std::string& value)
@@ -337,7 +342,7 @@ void GetTheFiles(wheel::SiPMToFilesMap& map, const wheel::Configuration& config)
     // Create a temp map for storing these
     std::set<std::string> tempMap; 
      
-    // Loop over the bias directories
+    // Only get the bias directory listed in config
     for(const auto& biasDirIter : stdfs::directory_iterator(sipmDir.c_str()))
     {
       // First get the bias
@@ -345,6 +350,9 @@ void GetTheFiles(wheel::SiPMToFilesMap& map, const wheel::Configuration& config)
       std::string path = biasDirIter.path();
       for (std::string::iterator ch = path.end(); *ch != '/'; ch--) bias = *ch + bias;
       const float thisBias = std::stof(bias);
+
+      if (thisBias != *config.biases.begin()) continue;
+      std::cout << "Bias chosen for SiPM " << sipm << " is " << thisBias << std::endl;
 
       // Loop over files?
       //std::set<std::string> files;
@@ -389,9 +397,9 @@ void PrintTheFiles(const wheel::SiPMToBiasTriggerMap& map)
   }
 }
 
-void SaveCharacterizationPlots(std::multimap<unsigned, std::vector<TH1D>>         ampDists, 
-                               std::multimap<unsigned, std::vector<TGraphErrors>> ampPeaks, 
-                               const wheel::Configuration&                        config)
+void SaveCharacterizationPlots(std::map<unsigned, std::vector<TH1D>>         ampDists, 
+                               std::map<unsigned, std::vector<TGraphErrors>> ampPeaks, 
+                               const wheel::Configuration&                   config)
 {
   // Canvases for out histos
   TCanvas masterAmpDist("masterAmpDist",  "All Amplitude Distributions", 1000, 1000);
@@ -414,7 +422,9 @@ void SaveCharacterizationPlots(std::multimap<unsigned, std::vector<TH1D>>       
       // Amplitude dist
       masterAmpDist.cd(ampCounter);
       gStyle->SetOptStat(0);
-      dist.Draw("apl");      
+      dist.GetXaxis()->SetTitle("Amplitude/Volts");
+      dist.Draw("apl");
+      dist.GetXaxis()->SetTitle("Amplitude/Volts"); 
       ampCounter++;
     }
     for (auto& peaks : ampPeaks.find(sipm)->second)

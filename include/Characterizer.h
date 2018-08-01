@@ -27,16 +27,16 @@ public:
   
   void Characterize(SiPMInfoMap& sipmInfoMap, const SiPMToTriggerMap& sipmToTriggerMap, const Configuration& config);
 
-  std::multimap<unsigned, std::vector<TH1D>>&         GetAmpDists() { return ampDists; }
-  std::multimap<unsigned, std::vector<TGraphErrors>>& GetAmpPeaks() { return ampPeaks; }
+  std::map<unsigned, std::vector<TH1D>>&         GetAmpDists() { return ampDists; }
+  std::map<unsigned, std::vector<TGraphErrors>>& GetAmpPeaks() { return ampPeaks; }
     
 private:
 
   void         MakeHistograms(const unsigned& sipm, const std::vector<HitCandidateVec>& hitCandVec, const Configuration& config);
   TGraphErrors FitGain(TH1D& hs, const unsigned& sipm, SiPMGains& sipmGains, const unsigned& nBias, const Configuration& config);
 
-  std::multimap<unsigned, std::vector<TH1D>> ampDists;
-  std::multimap<unsigned, std::vector<TGraphErrors>> ampPeaks;
+  std::map<unsigned, std::vector<TH1D>> ampDists;
+  std::map<unsigned, std::vector<TGraphErrors>> ampPeaks;
 
 };
 }

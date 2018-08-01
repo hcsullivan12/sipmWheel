@@ -1,4 +1,4 @@
-pathToData=/home/hunter/projects/wheel/data/07_27_18_test
+pathToData=/home/hunter/projects/wheel/data/07_30_18_characterize
 outputPath=/home/hunter/projects/wheel/output/outputFile.root
 recoOutputFile=/home/hunter/projects/wheel/output/recoOutput.root
 printFiles=false

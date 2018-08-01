@@ -16,52 +16,55 @@ FileReader::FileReader()
 FileReader::~FileReader()
 {}
 
-void FileReader::ReadFiles(SiPMToTriggerMap& sipmToTriggerMap, const SiPMToBiasTriggerMap& map, const Configuration& config)
+void FileReader::ReadFiles(SiPMToTriggerMap& sipmToTriggerMap, 
+                           const BiasToFileMap& biasMap, 
+                           const unsigned& sipm, 
+                           const Configuration& config)
 {
   // Loop over the sipms
-  unsigned channel = 1;
-  for (const auto& sipm : map)
-  {
+  //unsigned channel = 1;
+  //for (const auto& sipm : map)
+  //{
     // Create a trigger list for this sipm
     // If this is characterization, this is 
     // just a list of the different biases
     // Place a safety net here
     if (config.process == "characterize") 
     {
-      if (config.biases.size() != sipm.second.size()) { std::cout << "Error. The files do not match the biases listed in config.\n"; std::cout << std::endl; exit(1); } 
+      if (config.biases.size() != biasMap.size()) { std::cout << "Error. The files do not match the biases listed in config.\n"; std::cout << std::endl; exit(1); } 
     }
 
-    std::cout << "\nFinding hits for SiPM " << sipm.first << "..." << std::endl;
+    std::cout << "\nFinding hits for SiPM " << sipm << "..." << std::endl;
     std::vector<HitCandidateVec> triggerList;
-    unsigned totalSize = 0;
-    for (const auto& bias : sipm.second) totalSize += bias.second.size();
-    triggerList.reserve(sipm.second.size());
+    triggerList.reserve(biasMap.begin()->second.size());
 
     // Loop over the biases for this sipm
-    for (const auto& bias : sipm.second)
+    for (const auto& bias : biasMap)
     {
       std::cout << "Bias = " << bias.first << "\n";
       unsigned counter = 0;
       // Loop over the files for this bias and sipm
       for (const auto& file : bias.second)
       {
+        // Just to make sure we didnt get stuck
         if (counter % 50 == 0) std::cout << "Trigger #" << counter << std::endl;
         counter++;
-        if (counter > 150) break;
+        // Option to only do so many
+        if (counter > config.nFilesCharacterize) break;
         // Create a temp hitVec
         HitCandidateVec hitCandVec;
         // Now read this file
-        
-        ReadFile(hitCandVec, file, bias.first, sipm.first, config);
+        ReadFile(hitCandVec, file, bias.first, sipm, config);
         // Safety net to protect against division settings
         if (hitCandVec.size() < 20) triggerList.emplace_back(hitCandVec);
+        else std::cout << "Uh oh! Found " << hitCandVec.size() << " hits\n";
         triggerList.emplace_back(hitCandVec);
       }
     }
-    sipmToTriggerMap.emplace(sipm.first, triggerList);
-    channel++;
-  }
-
+    // There will only be one sipm here
+    sipmToTriggerMap.emplace(sipm, triggerList);
+    //channel++;
+  //}
 }
 
 void FileReader::ReadFiles(SiPMToTriggerMap& sipmToTriggerMap, const SiPMToFilesMap& map, const Configuration& config)

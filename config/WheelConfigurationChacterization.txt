@@ -14,6 +14,7 @@ characterizeAmpThr=0.02
 characterizeAmpSig=2.0
 characterizeAmpFitRange=0.001
 characterizeOutputFile=/home/hunter/projects/wheel/output/characterization.root
+nFilesCharacterize=250
 nBiases=3
 biases=73.5,73.7,74.0
 gains=0.005,0.005,0.005,0.005

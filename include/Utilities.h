@@ -48,6 +48,7 @@ using BinIndex             = std::pair<unsigned, std::map<std::string, float>>;
 using AccumulatorMap       = std::vector<BinIndex>;  // N0, r, theta, likelihood
 using DataList             = std::list<std::map<unsigned, float>>;
 using AccumulatorMapList   = std::list<AccumulatorMap>;
+using BiasToFileMap        = std::map<float, std::set<std::string>>;
 
 struct Configuration 
 {
@@ -69,6 +70,7 @@ struct Configuration
   float            characterizeAmpSig;
   float            characterizeAmpFitRange;
   std::string      characterizeOutputFile;
+  unsigned         nFilesCharacterize;
   unsigned                  nBiases;
   std::set<float>           biases;
   std::map<unsigned, float> gains;

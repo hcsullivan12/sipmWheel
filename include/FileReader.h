@@ -25,7 +25,7 @@ public:
   ~FileReader();
   
   void ReadFiles(SiPMToTriggerMap& sipmToTriggerMap, const SiPMToFilesMap& map, const wheel::Configuration& config);
-  void ReadFiles(SiPMToTriggerMap& sipmToTriggerMap, const SiPMToBiasTriggerMap& map, const wheel::Configuration& config);
+  void ReadFiles(SiPMToTriggerMap& sipmToTriggerMap, const BiasToFileMap& biasMap, const unsigned& sipm, const wheel::Configuration& config);
 
 
   std::vector<TGraph>&               GetGraphs()  { return waveforms; }

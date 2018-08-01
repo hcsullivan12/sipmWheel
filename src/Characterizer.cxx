@@ -19,54 +19,31 @@ Characterizer::~Characterizer()
 {}
 
 void Characterizer::Characterize(SiPMInfoMap& sipmInfoMap, const SiPMToTriggerMap& sipmToTriggerMap, const Configuration& config)
-{
-  /*// Canvases for out histos
-  TCanvas masterAmpDist("masterAmpDist",  "All Amplitude Distributions", 1000, 1000);
-  TCanvas masterGainPlot("masterGainPlot", "All Gains", 1000, 1000);
-  
-  // Divide the canvases
-  masterAmpDist.Divide(config.nBiases,config.nSiPMs);
-  masterGainPlot.Divide(config.nBiases,config.nSiPMs);*/
-  
+{  
   // Loop over the sipms and biases
   unsigned ampCounter(1);
   unsigned gainCounter(1);
   SiPMGains sipmGains;
+  // There should only be one sipm here 
   for (const auto& sipm : sipmToTriggerMap)
   {
     // Make the amplitude distributions
-    //std::vector<TH1D> ampDists;
-    MakeHistograms(sipm.first, sipm.second, config);
-    /*// Now draw them
-    for (auto& ampDist : ampDists)
-    {
-      masterAmpDist.cd(ampCounter);
-      gStyle->SetOptStat(0);
-      ampDist.Draw("apl");
-      ampCounter++;
-    }*/
-
+    MakeHistograms(sipm.first, sipm.second, config); 
     // Make the gain plot for each amplitude distribution
     // Reserve the space
     std::vector<TGraphErrors> g;
     g.reserve(ampDists.find(sipm.first)->second.size());
     ampPeaks.emplace(sipm.first, g);
     unsigned biasCounter = 0;
+    // Add the gain plot
     for (auto& ampDist : ampDists.find(sipm.first)->second)
     {
       ampPeaks.find(sipm.first)->second.emplace_back(FitGain(ampDist, sipm.first, sipmGains, biasCounter, config));
       biasCounter++;
-      /*masterGainPlot.cd(gainCounter);
-      ampPeaks.SetMarkerStyle(20);
-      ampPeaks.SetMarkerColor(1);
-      ampPeaks.Draw("AP");
-      gainCounter++;
-      ampPeaks.GetXaxis()->SetLimits(0, 5);
-      ampPeaks.SetMinimum(0);*/
     }
   }
-  
-  // Finally finished the large canvases 
+  // Ignore this for now
+  return;
 
   // Now the breakdown plots
   TCanvas bdPlots("SiPM Breakdowns", "SiPM Breakdowns", 800, 800);
