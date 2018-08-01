@@ -175,7 +175,7 @@ void Characterizer::MakeHistograms(const unsigned& sipm, const std::vector<HitCa
   unsigned index = 0;
   for (auto& dist : ampDists.find(sipm)->second)
   {
-    dist.SetBins(500, xMin[index], xMax[index]);
+    dist.SetBins(50, 0, xMax[index]);
     index++;
   }
 
@@ -196,64 +196,38 @@ TGraphErrors Characterizer::FitGain(TH1D& hs, const unsigned& sipm, SiPMGains& s
 {
   Float_t gain=0;
   TSpectrum s(3);
-  //float threshold = ampThreshold;
 
   Int_t nfound = s.Search(&hs, config.characterizeAmpSig, "", config.characterizeAmpThr);
   Int_t npeaks = s.GetNPeaks();
   printf("Found %d peaks to fit\n",npeaks);
 
-  //Double_t peaks;
-  //Double_t altpeaks;
+  // Get the peaks 
   auto peaks = s.GetPositionX();
 
-  Double_t x[npeaks], ex[npeaks];
-  Double_t y[npeaks], ey[npeaks];
-
+  Double_t y[npeaks],  ey[npeaks];
   Double_t gx[npeaks], gex[npeaks];
   Double_t gy[npeaks], gey[npeaks];
-
-  //Sort peaks
-  double temp;
-  int nchanges=0;
-  do 
-  {
-    nchanges=0;
-    for(int p = 0; p < nfound - 1; p++) 
-    {
-      if(peaks[p] > peaks[p+1]) 
-      {
-        temp=peaks[p];
-        peaks[p]=peaks[p+1];
-        peaks[p+1]=temp;
-        nchanges++;
-      }
-    }
-  } while(nchanges != 0);
-
-  for (int j = 0; j < npeaks; j++) 
-  {
-    x[j] =j+1;
-    y[j]=peaks[j];
-  }
-
-  int point = 1;
-  //double fitRange = ampFitRange;
  
-  for (int g = 0; g < npeaks; g++) 
+  // Print out the peaks found and store into a vec
+  std::vector<Double_t> peaksVec(npeaks, 0);
+  for (int p = 0; p < npeaks; p++) { std::cout << "Found peak at " << peaks[p] << " V\n"; peaksVec[p] = peaks[p]; }
+  std::sort(peaksVec.begin(), peaksVec.end(), [](const Double_t& left, const Double_t& right){return left < right;});
+ 
+  for (int peak = 0; peak < npeaks; peak++) 
   {
-    TF1 gfit("gfit", "gaus", y[g] - config.characterizeAmpFitRange/2, y[g] + config.characterizeAmpFitRange/2);
-    hs.Fit(&gfit,"QR+");
-    
-    gx[point - 1]  = point;
-    gy[point - 1]  = gfit.GetParameter(1);  //Mean
-    gey[point - 1] = gfit.GetParError(1);
-    point++;
+    TF1 gfit("gfit", "gaus", peaksVec[peak] - config.characterizeAmpFitRange/2, peaksVec[peak] + config.characterizeAmpFitRange/2);
+    hs.Fit(&gfit,"QR+");    
+    gx[peak]  = peak + 1;
+    gy[peak]  = gfit.GetParameter(1);  //Mean
+    gey[peak] = gfit.GetParError(1);
   }
 
   TGraphErrors grpeaks(npeaks,gx,gy,0,gey);
   std::string name = "SiPM " + std::to_string(sipm) + " Gain from " + std::to_string(*std::next(config.biases.begin(), nBias));
   grpeaks.SetTitle(name.c_str());
   grpeaks.GetYaxis()->SetTitle("Amplitude/Volts");
+
+  std::cout << "\nHere\n";
   
   grpeaks.GetYaxis()->SetTitleOffset(1.4);
   grpeaks.GetXaxis()->SetTitle("Peak N");
@@ -267,6 +241,8 @@ TGraphErrors Characterizer::FitGain(TH1D& hs, const unsigned& sipm, SiPMGains& s
   fit.SetParName(0, "Pedestal");
   grpeaks.Fit(&fit, "QR");
   gStyle->SetOptFit();
+
+  std::cout << "\nHere\n";
 
   sipmGains.emplace(sipm, 1000*fit.GetParameter(1) ); //Converted to mV 
 

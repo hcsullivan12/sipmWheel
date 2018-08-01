@@ -100,12 +100,6 @@ void Analyzer::FillAccumulatorMap()
   std::sort(p_accumulatorMap.begin(), p_accumulatorMap.end(), 
             [](const BinIndex& biL, const BinIndex& biR) 
             {return biL.second.find("likelihood")->second < biR.second.find("likelihood")->second;});
-
-  /*for (const auto& id : p_accumulatorMap)
-  {
-    std::cout << "LH = "       << id.second.find("likelihood")->second << "  N0 = "    << id.first 
-              << "  radius = " << id.second.find("radius")->second     << "  theta = " << id.second.find("theta")->second << std::endl;
-  }*/
 }
 
 void Analyzer::WheelReco(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const unsigned& trigger)
@@ -118,7 +112,8 @@ void Analyzer::WheelReco(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& 
   unsigned N0 = CountPhotons(sipmToTriggerMap, sipmInfoMap, trigger);
 
   std::cout << "Running MLE...\n";
-  while ( N0 <= 1000 ) 
+
+  while ( N0 <= 300 ) 
   {
     Handle(N0);
     N0++;

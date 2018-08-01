@@ -113,7 +113,7 @@ void OutputConfigInfo(wheel::Configuration& config)
   std::cout << "Process             " << config.process                        << std::endl
             << "PathToData          " << config.pathToData                     << std::endl
             << "OutputFile          " << config.characterizeOutputFile         << std::endl
-            << "NumberOfFiles       " << config.nFilesCharacterize             << std::endl
+            << "NFiles/SiPM         " << config.nFilesCharacterize             << std::endl
             << "SaveWaveforms       " << config.saveWaveforms                  << std::endl
             << "WaveformsFile       " << config.outputPath                     << std::endl
             << "BaselineSubtract    " << config.baselineSubtract               << std::endl
@@ -161,7 +161,7 @@ void Reco(const wheel::Configuration& myConfig)
   // Start reco
   for (unsigned trigger = 1; trigger <= nFiles; trigger++)
   {
-    std::cout << "\n" << std::setfill('*') << std::setw(80) << "-" << std::setfill(' ')  << std::endl; 
+    std::cout << "\n" << std::setfill('*') << std::setw(80) << "" << std::setfill(' ')  << std::endl; 
     std::cout << "\nInitializing event " << trigger << "..." << std::endl;
     // Now read the files
     std::cout << "Reading the files... " << std::endl;
@@ -431,8 +431,10 @@ void SaveCharacterizationPlots(std::map<unsigned, std::vector<TH1D>>         amp
       masterAmpDist.cd(ampCounter);
       gStyle->SetOptStat(0);
       dist.GetXaxis()->SetTitle("Amplitude/Volts");
-      dist.Draw("apl");
+      dist.Draw("pl");
+      masterAmpDist.Update();
       dist.GetXaxis()->SetTitle("Amplitude/Volts"); 
+      masterAmpDist.Modified();
       ampCounter++;
     }
     for (auto& peaks : ampPeaks.find(sipm)->second)
@@ -630,7 +632,7 @@ void MakeRecoPlots(wheel::Analyzer& analyzer, const wheel::Configuration& config
   lhHist.Draw("lego2 pol");
 
   // Draw the mle for r, theta
-  /*Double_t theta[1]   = {mleParameters[0].second.find("theta")->second*(TMath::Pi()/180)};
+ /* Double_t theta[1]   = {mleParameters[0].second.find("theta")->second*(TMath::Pi()/180)};
   Double_t radius[1]  = {mleParameters[0].second.find("radius")->second};
   Double_t etheta[1]  = {(config.thetaBinSize/2)*(TMath::Pi()/180)};
   Double_t eradius[1] = {config.radiusBinSize/2};*/
@@ -640,15 +642,18 @@ void MakeRecoPlots(wheel::Analyzer& analyzer, const wheel::Configuration& config
   // This does not work for some reason, not plotting marker
   /* TGraphPolar p(1, theta, radius, etheta, eradius);
   p.SetMarkerStyle(8);
-  p.SetMarkerSize(5);
+  p.SetMarkerSize(2);
   p.SetMarkerColor(2);
   p.SetLineColor(1);
-  p.SetLineWidth(3);
-  p.Draw("AOPE");
-  c2.Update();
+  p.SetLineWidth(2);
+  p.Draw("same PE");
+  c3.Update();
   p.SetMinRadial(0);
   p.SetMaxRadial(config.diskRadius);
-  p.GetPolargram()->SetToRadian();*/
+  p.SetMinPolar(0);
+  p.SetMaxPolar(2*TMath::Pi());
+  c3.Modified();*/
+  //p.GetPolargram()->SetToRadian();
 
   /*TMarker m(theta[0], radius[0], 8);
   m.SetMarkerColor(2);
