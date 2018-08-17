@@ -14,6 +14,7 @@
 #include <map>
 #include <list>
 #include <set>
+#include "TMarker.h"
 
 namespace wheel {
 
@@ -22,10 +23,9 @@ struct HitCandidate
   size_t channel;
   size_t startTick;
   size_t stopTick;
-  size_t maxTick;
-  size_t minTick;
   float  bias;
   size_t nPhotons;
+  float  hitBase;
   float  hitCenter;
   float  hitHeight;
 };
@@ -50,16 +50,19 @@ using AccumulatorMap       = std::vector<BinIndex>;  // N0, r, theta, likelihood
 using DataList             = std::list<std::map<unsigned, float>>;
 using AccumulatorMapList   = std::list<AccumulatorMap>;
 using BiasToFileMap        = std::map<float, std::set<std::string>>;
+using MarkerPairVec        = std::vector<std::vector<std::pair<TMarker,TMarker>>>;
 
 struct Configuration 
 {
   std::string      pathToData;
-  std::string      outputPath;
+  std::string      rawWaveformPath;
+  std::string      modWaveformPath;
   std::string      pathToConfig;
   std::string      recoOutputFile;
   bool             printFiles;
   bool             baselineSubtract;
-  bool             saveWaveforms;
+  bool             saveRawWaveforms;
+  bool             saveModWaveforms;
   unsigned         nSiPMs;
   unsigned         smaRange;
   unsigned         resolution;

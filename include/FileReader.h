@@ -36,17 +36,19 @@ public:
                  const unsigned&             sipm, 
                  const wheel::Configuration& config);
 
-
-  std::vector<TGraph>&               GetGraphs()  { return waveforms; }
-  std::vector<std::vector<TMarker>>& GetMarkers() { return markers; }
+ 
+  std::vector<TGraph>&  GetRawGraphs()  { return rawWaveforms; }
+  std::vector<TGraph>&  GetModGraphs()  { return modWaveforms; }
+  wheel::MarkerPairVec& GetMarkers()    { return markers; }
   
 private:
 
   void ReadFile(HitCandidateVec& hitCandidateVec, const std::string& filename, const float& bias, const unsigned& channel, const wheel::Configuration& config);
   void MakeTheMarkers(const HitCandidateVec& hitCandVec);
 
-  std::vector<TGraph>               waveforms;
-  std::vector<std::vector<TMarker>> markers; 
+  std::vector<TGraph>  rawWaveforms;
+  std::vector<TGraph>  modWaveforms;
+  MarkerPairVec        markers; 
 
 };
 }

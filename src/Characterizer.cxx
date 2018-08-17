@@ -175,7 +175,7 @@ void Characterizer::MakeHistograms(const unsigned& sipm, const std::vector<HitCa
   unsigned index = 0;
   for (auto& dist : ampDists.find(sipm)->second)
   {
-    dist.SetBins(50, 0, xMax[index]);
+    dist.SetBins(500, 0, xMax[index]);
     index++;
   }
 

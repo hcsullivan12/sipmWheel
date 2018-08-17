@@ -44,7 +44,7 @@ void FileReader::ReadFiles(SiPMToTriggerMap& sipmToTriggerMap,
     for (const auto& file : bias.second)
     {
       // Just to make sure we didnt get stuck
-      if (counter % 50 == 0) std::cout << "Trigger #" << counter << std::endl;
+      /*if (counter % 100 == 0)*/ std::cout << "Trigger #" << counter << std::endl;
       counter++;
       // Option to only do so many
       if (counter > config.nFilesCharacterize) break;
@@ -118,6 +118,19 @@ void FileReader::ReadFile(HitCandidateVec& hitCandidateVec, const std::string& f
 
     signal.push_back( atof(yTemp.c_str()) );
   }
+   // Only allow to store a few
+  if (config.saveRawWaveforms && rawWaveforms.size() < 30)
+  {
+    TGraph g(signal.size());
+    g.SetNameTitle(filename.c_str(), filename.c_str());
+    unsigned sample = 1;
+    for (const auto& amp : signal)
+    {
+      g.SetPoint(sample, sample - 1, amp);
+      sample++;
+    }
+    rawWaveforms.push_back(g);
+  }
  
   WaveformAlg waveformAlg; 
   waveformAlg.SmoothWaveform2(signal, config);
@@ -140,9 +153,8 @@ void FileReader::ReadFile(HitCandidateVec& hitCandidateVec, const std::string& f
   // Safety net to protect against division settings
   if (hitCandVec.size() > 20) return;
 
-
   // Only allow to store a few
-  if (config.saveWaveforms && waveforms.size() < 10)
+  if (config.saveModWaveforms && modWaveforms.size() < 30)
   {
     TGraph g(waveform.size());
     g.SetNameTitle(filename.c_str(), filename.c_str());
@@ -152,14 +164,14 @@ void FileReader::ReadFile(HitCandidateVec& hitCandidateVec, const std::string& f
       g.SetPoint(sample, sample - 1, amp);
       sample++;
     }
-    waveforms.push_back(g);
+    modWaveforms.push_back(g);
   }
 
   //std::cout << "Found: " << hitCandVec.size() << " hits. " << std::endl;
   // Append
   hitCandidateVec.insert(hitCandidateVec.end(), hitCandVec.begin(), hitCandVec.end());
 
-  if (config.saveWaveforms && waveforms.size() <= 10) MakeTheMarkers(hitCandVec);
+  if (config.saveModWaveforms && modWaveforms.size() <= 30) MakeTheMarkers(hitCandVec);
 
   //fits.push_back(FitTheHits(waveform, hitCandVec));
 
@@ -175,13 +187,16 @@ void FileReader::ReadFile(HitCandidateVec& hitCandidateVec, const std::string& f
 
 void FileReader::MakeTheMarkers(const HitCandidateVec& hitCandVec)
 {
-  std::vector<TMarker> mks;
+  std::vector<std::pair<TMarker,TMarker>> mks;
   for (const auto& hit : hitCandVec)
   {
-    TMarker m(hit.hitCenter, hit.hitHeight, 8);
-    m.SetMarkerColor(2);
-    m.SetMarkerSize(1.5);
-    mks.push_back(m);
+    TMarker mMax(hit.hitCenter, hit.hitHeight, 23);
+    TMarker mMin(hit.startTick, hit.hitBase, 23);
+    mMax.SetMarkerColor(4);
+    mMax.SetMarkerSize(1.5);
+    mMin.SetMarkerColor(4);
+    mMin.SetMarkerSize(1.5); 
+    mks.emplace_back(mMin, mMax);
   } 
   markers.push_back(mks);
 }

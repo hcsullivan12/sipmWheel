@@ -1,9 +1,11 @@
 pathToData=/home/hunter/projects/wheel/data/07_30_18_characterize
-outputPath=/home/hunter/projects/wheel/output/outputFile.root
+rawWaveformPath=/home/hunter/projects/wheel/output/rawWaveforms.root
+modWaveformPath=/home/hunter/projects/wheel/output/modWaveforms.root
 recoOutputFile=/home/hunter/projects/wheel/output/recoOutput.root
 printFiles=false
 baselineSubtract=true
-saveWaveforms=true
+saveRawWaveforms=true
+saveModWaveforms=true
 nSiPMs=4
 hitSigma=3
 minimumHitAmp=0.05

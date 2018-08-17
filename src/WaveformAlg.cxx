@@ -85,11 +85,12 @@ void WaveformAlg::FindHitCandidates(std::vector<float>&  waveform,
                                     const Configuration& config)
 {
   // Find noise parameters first
-  const auto noiseParameters = ComputeNoise(waveform, config);
+  float baselineInter(0);
+  const auto noiseParameters = ComputeNoise(waveform, baselineInter, config);
 
   // Use the recursive version to find the candidate hits
-  FindHitCandidates(waveform.begin(), waveform.end(), noiseParameters, bias, roiStartTick, hitCandVec, config);
-  
+  // We only need to search a limited range 
+  FindHitCandidates(waveform.begin(), waveform.end(), noiseParameters, bias, roiStartTick, hitCandVec, config);  
   return;
 }
 
@@ -113,9 +114,7 @@ void WaveformAlg::FindHitCandidates(std::vector<float>::const_iterator startItr,
     int   maxTime  = std::distance(startItr,maxItr);
 
     float hitThreshold;
-    if (config.baselineSubtract) hitThreshold = config.minimumHitAmp;
-    // Subtract off the baseline here
-    else hitThreshold = std::max( noiseParameters.first + config.hitSigma*noiseParameters.second, config.minimumHitAmp ) - noiseParameters.first; 
+    float hitThreshold = std::max( noiseParameters.first + config.hitSigma*noiseParameters.second, config.minimumHitAmp ); 
 
     //std::cout << noiseParameters.first + hitSigma*noiseParameters.second << "  " << minimumHitAmp << "  " << maxValue << std::endl;
 
@@ -135,6 +134,7 @@ void WaveformAlg::FindHitCandidates(std::vector<float>::const_iterator startItr,
         firstItr-=configOffset;
       }
 
+      float min     = *firstItr;
       int firstTime = std::distance(startItr,firstItr);
 
       // Recursive call to find all candidate hits earlier than this peak
@@ -160,8 +160,7 @@ void WaveformAlg::FindHitCandidates(std::vector<float>::const_iterator startItr,
       HitCandidate hitCandidate;
       hitCandidate.startTick     = roiStartTick + firstTime;
       hitCandidate.stopTick      = roiStartTick + lastTime;
-      hitCandidate.maxTick       = roiStartTick + firstTime;
-      hitCandidate.minTick       = roiStartTick + lastTime;
+      hitCandidate.hitBase       = min;
       hitCandidate.hitCenter     = roiStartTick + maxTime;
       hitCandidate.hitHeight     = maxValue;
       hitCandidate.bias          = bias;
@@ -176,7 +175,7 @@ void WaveformAlg::FindHitCandidates(std::vector<float>::const_iterator startItr,
   return;
 }
 
-std::pair<float, float> WaveformAlg::ComputeNoise(std::vector<float>& signal, const Configuration& config)
+std::pair<float, float> WaveformAlg::ComputeNoise(std::vector<float>& signal, float& baselineInter, const Configuration& config)
 {
   // Find min and max of this signal for number of bins
   auto min_max = std::minmax_element( signal.begin(), signal.end() );
@@ -197,13 +196,16 @@ std::pair<float, float> WaveformAlg::ComputeNoise(std::vector<float>& signal, co
   // Fit the amplitude distribution
   TF1 gauss("gauss", "gaus");
   amplitudeDist.GetXaxis()->SetRangeUser(amplitudeDist.GetMean() - 3 * amplitudeDist.GetStdDev(), amplitudeDist.GetMean() + 3 * amplitudeDist.GetStdDev());
-  amplitudeDist.Fit(&gauss, "QN");
+  amplitudeDist.Fit(&gauss, "QN"); 
+  // Extrapolate
+  TF1 line("line", "[0] + [1]*(x-[2])", 0, max);
+  float x     = gauss.GetParameter(1) + 0.4*gauss.GetParameter(2);
+  float y     = gauss.Eval(x);
+  float slope = gauss.Derivative(x);
+  line.SetParameters(y,slope,x);
+  TF1 fint("fint", "TMath::Abs(0-line)", gauss.GetParameter(1), max);
 
-  if (config.baselineSubtract)
-  {
-    for (auto& amp : signal) amp  = amp - gauss.GetParameter(1);
-  }
-
+  baselineInter = fint.GetMinimumX();
   return std::pair<double, double>(gauss.GetParameter(1), gauss.GetParameter(2));
 }
 

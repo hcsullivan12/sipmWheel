@@ -38,7 +38,7 @@ void PrintTheFiles(const wheel::SiPMToBiasTriggerMap& sipmToBiasTriggerMap);
 void GetTheCharacterizationFiles(wheel::SiPMToBiasTriggerMap& map, const wheel::Configuration& config);
 void GetTheFiles(wheel::SiPMToFilesMap& map, const wheel::Configuration& config);
 void ReadConfigFile(wheel::Configuration& config);
-void SaveWaveforms(std::vector<TGraph>& graphs, std::vector<std::vector<TMarker>>& markers, const wheel::Configuration& config);
+void SaveWaveforms(wheel::FileReader& fr, const wheel::Configuration& config);
 void Characterize(const wheel::Configuration& myConfig);
 void Reco(const wheel::Configuration& myConfig);
 void RecordBiases(wheel::Configuration& config, const std::string& value);
@@ -86,8 +86,10 @@ void OutputConfigInfo(wheel::Configuration& config)
   if (config.process == "reco") {
   std::cout << "Process             " << config.process                        << std::endl
             << "PathToData          " << config.pathToData                     << std::endl
-            << "SaveWaveforms       " << config.saveWaveforms                  << std::endl
-            << "WaveformsFile       " << config.outputPath                     << std::endl
+            << "SaveRawWaveforms    " << config.saveRawWaveforms               << std::endl
+            << "SaveModWaveforms    " << config.saveModWaveforms               << std::endl
+            << "RawWaveformsFile    " << config.rawWaveformPath                << std::endl
+            << "ModWaveformsFile    " << config.modWaveformPath                << std::endl
             << "RecoOutputFile      " << config.recoOutputFile                 << std::endl
             << "BaselineSubtract    " << config.baselineSubtract               << std::endl
             << "SMARange            " << config.smaRange                       << std::endl
@@ -114,8 +116,10 @@ void OutputConfigInfo(wheel::Configuration& config)
             << "PathToData          " << config.pathToData                     << std::endl
             << "OutputFile          " << config.characterizeOutputFile         << std::endl
             << "NFiles/SiPM         " << config.nFilesCharacterize             << std::endl
-            << "SaveWaveforms       " << config.saveWaveforms                  << std::endl
-            << "WaveformsFile       " << config.outputPath                     << std::endl
+            << "SaveRawWaveforms    " << config.saveRawWaveforms               << std::endl
+            << "SaveModWaveforms    " << config.saveModWaveforms               << std::endl
+            << "RawWaveformsFile    " << config.rawWaveformPath                << std::endl
+            << "ModWaveformsFile    " << config.modWaveformPath                << std::endl
             << "BaselineSubtract    " << config.baselineSubtract               << std::endl
             << "SMARange            " << config.smaRange                       << std::endl
             << "WaveformResolution  " << config.resolution                     << std::endl
@@ -174,7 +178,7 @@ void Reco(const wheel::Configuration& myConfig)
       if (sipm.second.size() != 1) { std::cout << "Error. There is not 1 file specified for each sipm\n." << std::endl; exit(1); }
     } 
     // Option to output a few waveforms
-    if (myConfig.saveWaveforms && trigger == 1) SaveWaveforms(fr.GetGraphs(), fr.GetMarkers(), myConfig);
+    if (trigger == 1) SaveWaveforms(fr, myConfig);
   
     wheel::Analyzer analyzer;
     analyzer.RunReco(sipmToTriggerMap, sipmInfoMap, myConfig, trigger);
@@ -204,10 +208,10 @@ void Characterize(const wheel::Configuration& myConfig)
     wheel::FileReader fr;
     fr.ReadFiles(sipmToTriggerMap, sipm.second, sipm.first, myConfig);
     // Option to output graphs
-    if (myConfig.saveWaveforms) SaveWaveforms(fr.GetGraphs(), fr.GetMarkers(), myConfig);
+    SaveWaveforms(fr, myConfig);
     // Characterize
     wheel::SiPMInfoMap sipmInfoMap;
-    ch.Characterize(sipmInfoMap, sipmToTriggerMap, myConfig);
+    //ch.Characterize(sipmInfoMap, sipmToTriggerMap, myConfig);
   }
   // Save the plots
   SaveCharacterizationPlots(ch.GetAmpDists(), ch.GetAmpPeaks(), myConfig);
@@ -245,12 +249,14 @@ void ReadConfigFile(wheel::Configuration& config)
   {
     std::getline(file, value);
 
-    if      (header == "pathToData")              config.pathToData     = value;
-    else if (header == "outputPath")              config.outputPath     = value;
-    else if (header == "recoOutputFile")          config.recoOutputFile = value;
+    if      (header == "pathToData")              config.pathToData      = value;
+    else if (header == "rawWaveformPath")         config.rawWaveformPath = value;
+    else if (header == "modWaveformPath")         config.modWaveformPath = value;
+    else if (header == "recoOutputFile")          config.recoOutputFile  = value;
     else if (header == "printFiles")              value == "true" ? config.printFiles       = true : config.printFiles       = false;
     else if (header == "baselineSubtract")        value == "true" ? config.baselineSubtract = true : config.baselineSubtract = false;
-    else if (header == "saveWaveforms")           value == "true" ? config.saveWaveforms    = true : config.saveWaveforms    = false;
+    else if (header == "saveRawWaveforms")        value == "true" ? config.saveRawWaveforms = true : config.saveRawWaveforms = false;
+    else if (header == "saveModWaveforms")        value == "true" ? config.saveModWaveforms = true : config.saveModWaveforms = false;
     else if (header == "nSiPMs")                  config.nSiPMs          = std::stoi(value);
     else if (header == "smaRange")                config.smaRange        = std::stoi(value);
     else if (header == "hitFinderSearch")         config.hitFinderSearch = std::stoi(value);
@@ -456,32 +462,53 @@ void SaveCharacterizationPlots(std::map<unsigned, std::vector<TH1D>>         amp
   f.Close();
 };
 
-void SaveWaveforms(std::vector<TGraph>& graphs, std::vector<std::vector<TMarker>>& markers, const wheel::Configuration& config)
+void SaveWaveforms(wheel::FileReader& fr, const wheel::Configuration& config)
 {
-  std::cout << "Outputing waveforms... " << std::endl;
-  // Create a file to write to
-  TFile f(config.outputPath.c_str(), "RECREATE");
-  
-  unsigned counter = 0;
-  for (auto& g : graphs)
+  // First output raw
+  if (config.saveRawWaveforms)
   {
-    // Set a safety net here
-    if (counter >= 10 || counter > markers.size()) break;
-
-    TCanvas c(std::to_string(counter).c_str(), std::to_string(counter).c_str(), 500, 500);
-    //g->GetXaxis()->SetRangeUser(1900, 2100);
-    //g->Fit(fits[counter], "R+", "", 1988, 2100);
-    g.Draw("");
-    for (auto& m : markers[counter])
+    std::cout << "Outputing waveforms... " << std::endl;
+    // Create a file to write to
+    TFile f(config.rawWaveformPath.c_str(), "RECREATE");
+  
+    unsigned counter = 0;
+    for (auto& g : fr.GetRawGraphs())
     {
-      m.Draw("same");
+      TCanvas c(std::to_string(counter).c_str(), std::to_string(counter).c_str(), 500, 500);
+      //g->GetXaxis()->SetRangeUser(1900, 2100);
+      //g->Fit(fits[counter], "R+", "", 1988, 2100);
+      g.Draw("");
+      // Write this to file
+      c.Write();
+      counter++;
     }
-    // Write this to file
-    c.Write();
-    counter++;
+  f.Close();
   }
- 
-  f.Close();;
+  // Now output modified
+  if (config.saveModWaveforms)
+  {
+    std::cout << "Outputing modified waveforms... " << std::endl;
+    // Create a file to write to
+    TFile f(config.modWaveformPath.c_str(), "RECREATE");
+  
+    unsigned counter = 0;
+    for (auto& g : fr.GetModGraphs())
+    {
+      TCanvas c(std::to_string(counter).c_str(), std::to_string(counter).c_str(), 500, 500);
+      //g->GetXaxis()->SetRangeUser(1900, 2100);
+      //g->Fit(fits[counter], "R+", "", 1988, 2100);
+      g.Draw("");
+      for (auto& m : fr.GetMarkers()[counter])
+      {
+        m.first.Draw("same");
+        m.second.Draw("same");
+      }
+      // Write this to file
+      c.Write();
+      counter++;
+    }
+  f.Close();
+  }
 }
 
 Double_t disk(Double_t* x, Double_t* par)

@@ -32,7 +32,7 @@ public:
 
 private:
 
-  std::pair<float, float> ComputeNoise(std::vector<float>& signal, const wheel::Configuration& config);
+  std::pair<float, float> ComputeNoise(std::vector<float>& signal, float& baselineInter, const wheel::Configuration& config);
   void                    FindHitCandidates(std::vector<float>::const_iterator startItr,
                                             std::vector<float>::const_iterator stopItr,
                                             const std::pair<float, float>&     noiseParameters,
