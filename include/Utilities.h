@@ -26,8 +26,9 @@ struct HitCandidate
   float  bias;
   size_t nPhotons;
   float  hitBase;
-  float  hitCenter;
-  float  hitHeight;
+  float  hitPeak;
+  float  hitPeakTick;
+  float  hitAmplitude;
 };
 
 struct SiPMInfo 

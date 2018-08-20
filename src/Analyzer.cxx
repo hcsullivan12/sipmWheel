@@ -162,7 +162,7 @@ unsigned Analyzer::CountPhotons(SiPMToTriggerMap& sipmToTriggerMap, const SiPMIn
     for (auto& hit : sipm.second[0])
     {
       //std::cout << hit.hitHeight << "  " << hit.bias << "  " << thisBD << "\n";
-      hit.nPhotons = std::round(hit.hitHeight/( thisGain*( hit.bias - thisBD ) ));   // hit.bias - thisBD
+      hit.nPhotons = std::round(hit.hitAmplitude/( thisGain*( hit.bias - thisBD ) ));   // hit.bias - thisBD
       //std::cout << hit.nPhotons << std::endl;
       if (hit.nPhotons > max)               max = hit.nPhotons;
       if (hit.nPhotons > maxPhotons) maxPhotons = hit.nPhotons;

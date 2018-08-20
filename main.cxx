@@ -211,7 +211,7 @@ void Characterize(const wheel::Configuration& myConfig)
     SaveWaveforms(fr, myConfig);
     // Characterize
     wheel::SiPMInfoMap sipmInfoMap;
-    //ch.Characterize(sipmInfoMap, sipmToTriggerMap, myConfig);
+    ch.Characterize(sipmInfoMap, sipmToTriggerMap, myConfig);
   }
   // Save the plots
   SaveCharacterizationPlots(ch.GetAmpDists(), ch.GetAmpPeaks(), myConfig);

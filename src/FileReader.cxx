@@ -190,7 +190,7 @@ void FileReader::MakeTheMarkers(const HitCandidateVec& hitCandVec)
   std::vector<std::pair<TMarker,TMarker>> mks;
   for (const auto& hit : hitCandVec)
   {
-    TMarker mMax(hit.hitCenter, hit.hitHeight, 23);
+    TMarker mMax(hit.hitPeakTick, hit.hitPeak, 23);
     TMarker mMin(hit.startTick, hit.hitBase, 23);
     mMax.SetMarkerColor(4);
     mMax.SetMarkerSize(1.5);

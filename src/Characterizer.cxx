@@ -166,8 +166,8 @@ void Characterizer::MakeHistograms(const unsigned& sipm, const std::vector<HitCa
     {
       // Get bias index for this hit 
       const unsigned index = std::distance(config.biases.begin(), config.biases.find(hit.bias));
-      if (hit.hitHeight < xMin[index]) xMin[index] = hit.hitHeight;
-      if (hit.hitHeight > xMax[index]) xMax[index] = hit.hitHeight;
+      if (hit.hitAmplitude < xMin[index]) xMin[index] = hit.hitAmplitude;
+      if (hit.hitAmplitude > xMax[index]) xMax[index] = hit.hitAmplitude;
     }
   }
 
@@ -187,7 +187,7 @@ void Characterizer::MakeHistograms(const unsigned& sipm, const std::vector<HitCa
       // Get bias for this hit and get the hist that matches this
       const unsigned index = std::distance(config.biases.begin(), config.biases.find(hit.bias));
       auto& dist = ampDists.find(sipm)->second[index];
-      dist.Fill(hit.hitHeight);
+      dist.Fill(hit.hitAmplitude);
     }
   }
 }
