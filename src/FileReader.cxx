@@ -53,8 +53,6 @@ void FileReader::ReadFiles(SiPMToTriggerMap& sipmToTriggerMap,
       // Now read this file
       ReadFile(hitCandVec, file, bias.first, sipm, config);
       // Safety net to protect against division settings
-      if (hitCandVec.size() < 20) triggerList.emplace_back(hitCandVec);
-      else std::cout << "Uh oh! Found " << hitCandVec.size() << " hits\n";
       triggerList.emplace_back(hitCandVec);
     }
   }
@@ -80,7 +78,7 @@ void FileReader::ReadFiles(SiPMToTriggerMap& sipmToTriggerMap,
     const std::string& file = *std::next(map.find(sipm.first)->second.begin(), trigger - 1);
     ReadFile(hitCandVec, file, sipmInfoMap.find(sipm.first)->second.bias, sipm.first, config);
     // Safety net to protect against division settings
-    if (hitCandVec.size() < 20) triggerList.emplace_back(hitCandVec);
+    triggerList.emplace_back(hitCandVec);
     
     sipmToTriggerMap.emplace(sipm.first, triggerList);
   }
@@ -150,8 +148,6 @@ void FileReader::ReadFile(HitCandidateVec& hitCandidateVec, const std::string& f
   // Let's do the hit finding now
   HitCandidateVec hitCandVec;
   waveformAlg.FindHitCandidates(waveform, 0, channel, bias, hitCandVec, config);
-  // Safety net to protect against division settings
-  if (hitCandVec.size() > 20) return;
 
   // Only allow to store a few
   if (config.saveModWaveforms && modWaveforms.size() < 30)

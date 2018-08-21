@@ -175,7 +175,7 @@ void Characterizer::MakeHistograms(const unsigned& sipm, const std::vector<HitCa
   unsigned index = 0;
   for (auto& dist : ampDists.find(sipm)->second)
   {
-    dist.SetBins(500, 0, xMax[index]);
+    dist.SetBins(200, 0, 0.15);
     index++;
   }
 
@@ -226,8 +226,6 @@ TGraphErrors Characterizer::FitGain(TH1D& hs, const unsigned& sipm, SiPMGains& s
   std::string name = "SiPM " + std::to_string(sipm) + " Gain from " + std::to_string(*std::next(config.biases.begin(), nBias));
   grpeaks.SetTitle(name.c_str());
   grpeaks.GetYaxis()->SetTitle("Amplitude/Volts");
-
-  std::cout << "\nHere\n";
   
   grpeaks.GetYaxis()->SetTitleOffset(1.4);
   grpeaks.GetXaxis()->SetTitle("Peak N");
@@ -241,8 +239,6 @@ TGraphErrors Characterizer::FitGain(TH1D& hs, const unsigned& sipm, SiPMGains& s
   fit.SetParName(0, "Pedestal");
   grpeaks.Fit(&fit, "QR");
   gStyle->SetOptFit();
-
-  std::cout << "\nHere\n";
 
   sipmGains.emplace(sipm, 1000*fit.GetParameter(1) ); //Converted to mV 
 

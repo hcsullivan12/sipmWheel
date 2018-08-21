@@ -208,7 +208,7 @@ void Characterize(const wheel::Configuration& myConfig)
     wheel::FileReader fr;
     fr.ReadFiles(sipmToTriggerMap, sipm.second, sipm.first, myConfig);
     // Option to output graphs
-    SaveWaveforms(fr, myConfig);
+    if (sipm.first == 1) SaveWaveforms(fr, myConfig);
     // Characterize
     wheel::SiPMInfoMap sipmInfoMap;
     ch.Characterize(sipmInfoMap, sipmToTriggerMap, myConfig);
@@ -281,10 +281,10 @@ void ReadConfigFile(wheel::Configuration& config)
   }
   
   // Place a series of safety nets here;
-  if (config.nBiases != config.biases.size())     { std::cout << "Error. Number of biases does not match in config.\n" << std::endl; exit(1); }
-  if (config.nSiPMs  != config.gains.size())      { std::cout << "Error. Number of gains does not match number of SiPMs\n." << std::endl; exit(1); }
-  if (config.nSiPMs  != config.breakdowns.size()) { std::cout << "Error. Number of breakdowns does not match number of SiPMs\n." << std::endl; exit(1); }
-  if (config.process == "reco" && config.biases.size() != 1) { std::cout << "Error. Can only specify one bias for reconstruction\n." << std::endl; exit(1); }
+  if (config.nBiases != config.biases.size())                                { std::cout << "Error. Number of biases does not match in config.\n" << std::endl; exit(1); }
+  if (config.process == "reco" && config.nSiPMs != config.gains.size())      { std::cout << "Error. Number of gains does not match number of SiPMs\n." << std::endl; exit(1); }
+  if (config.process == "reco" && config.nSiPMs != config.breakdowns.size()) { std::cout << "Error. Number of breakdowns does not match number of SiPMs\n." << std::endl; exit(1); }
+  if (config.process == "reco" && config.biases.size() != 1)                 { std::cout << "Error. Can only specify one bias for reconstruction\n." << std::endl; exit(1); }
 }
 
 void RecordGains(std::map<unsigned, float>& map, const wheel::Configuration& config, const std::string& value)
@@ -437,7 +437,7 @@ void SaveCharacterizationPlots(std::map<unsigned, std::vector<TH1D>>         amp
       masterAmpDist.cd(ampCounter);
       gStyle->SetOptStat(0);
       dist.GetXaxis()->SetTitle("Amplitude/Volts");
-      dist.Draw("pl");
+      dist.Draw();
       masterAmpDist.Update();
       dist.GetXaxis()->SetTitle("Amplitude/Volts"); 
       masterAmpDist.Modified();
