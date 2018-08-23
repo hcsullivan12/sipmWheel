@@ -23,12 +23,15 @@ struct HitCandidate
   size_t channel;
   size_t startTick;
   size_t stopTick;
+  float  startTickAmp;
+  float  stopTickAmp;
   float  bias;
   size_t nPhotons;
   float  hitBase;
   float  hitPeak;
   float  hitPeakTick;
   float  hitAmplitude;
+  float  hitIntegral;
 };
 
 struct SiPMInfo 

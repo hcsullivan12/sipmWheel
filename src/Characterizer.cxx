@@ -153,7 +153,7 @@ void Characterizer::MakeHistograms(const unsigned& sipm, const std::vector<HitCa
     std::string name = "SiPM " + std::to_string(sipm) + " at " + std::to_string(bias) + " V";
     // We will rebin
     TH1D h(name.c_str(), name.c_str(), 1, 0, 1);
-    h.GetXaxis()->SetTitle("Amplitude/Volts");
+    h.GetXaxis()->SetTitle("Integral/a.u.");
     ampDists.find(sipm)->second.emplace_back(h);
   }
   // Create a container for min and max
@@ -166,19 +166,17 @@ void Characterizer::MakeHistograms(const unsigned& sipm, const std::vector<HitCa
     {
       // Get bias index for this hit 
       const unsigned index = std::distance(config.biases.begin(), config.biases.find(hit.bias));
-      if (hit.hitAmplitude < xMin[index]) xMin[index] = hit.hitAmplitude;
-      if (hit.hitAmplitude > xMax[index]) xMax[index] = hit.hitAmplitude;
+      if (hit.hitIntegral < xMin[index]) xMin[index] = hit.hitIntegral;
+      if (hit.hitIntegral > xMax[index]) xMax[index] = hit.hitIntegral;
     }
   }
-
   // Now reset the binning
   unsigned index = 0;
   for (auto& dist : ampDists.find(sipm)->second)
   {
-    dist.SetBins(200, 0, 0.15);
+    dist.SetBins(100, 0, 100);
     index++;
   }
-
   // Loop over the hits to fill histos
   for (const auto& hitVec : vecOfHitCandVec)
   {
@@ -187,7 +185,7 @@ void Characterizer::MakeHistograms(const unsigned& sipm, const std::vector<HitCa
       // Get bias for this hit and get the hist that matches this
       const unsigned index = std::distance(config.biases.begin(), config.biases.find(hit.bias));
       auto& dist = ampDists.find(sipm)->second[index];
-      dist.Fill(hit.hitAmplitude);
+      dist.Fill(hit.hitIntegral);
     }
   }
 }
@@ -210,7 +208,7 @@ TGraphErrors Characterizer::FitGain(TH1D& hs, const unsigned& sipm, SiPMGains& s
  
   // Print out the peaks found and store into a vec
   std::vector<Double_t> peaksVec(npeaks, 0);
-  for (int p = 0; p < npeaks; p++) { std::cout << "Found peak at " << peaks[p] << " V\n"; peaksVec[p] = peaks[p]; }
+  for (int p = 0; p < npeaks; p++) { std::cout << "Found peak at " << peaks[p] << "\n"; peaksVec[p] = peaks[p]; }
   std::sort(peaksVec.begin(), peaksVec.end(), [](const Double_t& left, const Double_t& right){return left < right;});
  
   for (int peak = 0; peak < npeaks; peak++) 
@@ -225,7 +223,7 @@ TGraphErrors Characterizer::FitGain(TH1D& hs, const unsigned& sipm, SiPMGains& s
   TGraphErrors grpeaks(npeaks,gx,gy,0,gey);
   std::string name = "SiPM " + std::to_string(sipm) + " Gain from " + std::to_string(*std::next(config.biases.begin(), nBias));
   grpeaks.SetTitle(name.c_str());
-  grpeaks.GetYaxis()->SetTitle("Amplitude/Volts");
+  grpeaks.GetYaxis()->SetTitle("Area/a.u.");
   
   grpeaks.GetYaxis()->SetTitleOffset(1.4);
   grpeaks.GetXaxis()->SetTitle("Peak N");

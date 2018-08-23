@@ -16,7 +16,10 @@ FileReader::FileReader()
 FileReader::~FileReader()
 {}
 
-// This method is for characterization
+/*
+ * This method is for characterization
+ * 
+ **/
 void FileReader::ReadFiles(SiPMToTriggerMap& sipmToTriggerMap, 
                            const BiasToFileMap& biasMap, 
                            const unsigned& sipm, 
@@ -60,7 +63,10 @@ void FileReader::ReadFiles(SiPMToTriggerMap& sipmToTriggerMap,
   sipmToTriggerMap.emplace(sipm, triggerList);
 }
 
-// This method is for reco
+/*
+ * This method is for reco
+ *
+ */
 void FileReader::ReadFiles(SiPMToTriggerMap& sipmToTriggerMap, 
                            const SiPMToFilesMap& map, 
                            const unsigned& trigger, 
@@ -92,15 +98,12 @@ void FileReader::ReadFile(HitCandidateVec& hitCandidateVec, const std::string& f
     std::cout << "Cannot open file: " << filename << std::endl;
     return;
   }
-
   std::string word = "";
   std::vector<float> signal;
-
-  // Skip first text
+  // Skip first text in file
   while (word != "Time,Ampl") {
     file >> word;
   }
-
   int counter = 0;
   int push = 0;
   while(!file.eof()) 
@@ -108,16 +111,32 @@ void FileReader::ReadFile(HitCandidateVec& hitCandidateVec, const std::string& f
     // Data starts
     std::string yTemp;
     std::string xTemp;
-
     std::getline(file, xTemp, ',');
     std::getline(file, yTemp);
-
     counter++;
 
     signal.push_back( atof(yTemp.c_str()) );
   }
-   // Only allow to store a few
-  if (config.saveRawWaveforms && rawWaveforms.size() < 30)
+
+  // Analyze this waveform
+  Analyze(signal, hitCandidateVec, filename, bias, channel, config);
+}
+
+/*
+ *  This method analyzes each waveform:
+ *    1) Smoothing alg
+ *    2) HitFinder alg
+ *
+ */
+void FileReader::Analyze(std::vector<float>&  signal, 
+                         HitCandidateVec&     hitCandidateVec, 
+                         const std::string&   filename, 
+                         const float&         bias, 
+                         const unsigned&      channel, 
+                         const Configuration& config)
+{
+  // Raw waveform: Only allow to store a few
+  if (config.saveRawWaveforms && channel == 1 && rawWaveforms.size() < 30)
   {
     TGraph g(signal.size());
     g.SetNameTitle(filename.c_str(), filename.c_str());
@@ -129,65 +148,46 @@ void FileReader::ReadFile(HitCandidateVec& hitCandidateVec, const std::string& f
     }
     rawWaveforms.push_back(g);
   }
- 
+  // Smooth the waveform
   WaveformAlg waveformAlg; 
-  waveformAlg.SmoothWaveform2(signal, config);
-  std::vector<float> waveform;
-  counter = 0;
-  for(const auto& amp : signal)
-  {
-    if (counter % config.resolution != 0) 
-    {
-      counter++;
-      continue;
-    }
-    counter++;
-    waveform.push_back(amp);
-  }
-
+  //waveformAlg.SmoothWaveform2(signal, config); 
   // Let's do the hit finding now
   HitCandidateVec hitCandVec;
-  waveformAlg.FindHitCandidates(waveform, 0, channel, bias, hitCandVec, config);
+  waveformAlg.FindHits(signal, channel, bias, hitCandVec, config);
+  //waveformAlg.FindHitCandidates(waveform, 0, channel, bias, hitCandVec, config);
 
-  // Only allow to store a few
-  if (config.saveModWaveforms && modWaveforms.size() < 30)
+  // Modified waveform: Only allow to store a few
+  if (config.saveModWaveforms && channel == 1  && modWaveforms.size() < 30)
   {
-    TGraph g(waveform.size());
+    TGraph g(signal.size());
     g.SetNameTitle(filename.c_str(), filename.c_str());
     unsigned sample = 1;
-    for (const auto& amp : waveform)
+    for (const auto& amp : signal)
     {
       g.SetPoint(sample, sample - 1, amp);
       sample++;
     }
     modWaveforms.push_back(g);
   }
-
-  //std::cout << "Found: " << hitCandVec.size() << " hits. " << std::endl;
+  std::cout << "Found: " << hitCandVec.size() << " hits. " << std::endl;
   // Append
   hitCandidateVec.insert(hitCandidateVec.end(), hitCandVec.begin(), hitCandVec.end());
-
-  if (config.saveModWaveforms && modWaveforms.size() <= 30) MakeTheMarkers(hitCandVec);
-
-  //fits.push_back(FitTheHits(waveform, hitCandVec));
-
-  /*for (const auto& hit : hitCandVec) 
-  {
-    std::cout << "\nHIT...\n";
-    std::cout << "Start tick: " << hit.startTick  << std::endl
-	      << "Stop  tick: " << hit.stopTick   << std::endl
-	      << "Centertick: " << hit.hitCenter  << std::endl
-	      << "Hit height: " << hit.hitHeight  << std::endl;
-  } */
+  // Make the markers for the graphs
+  if (config.saveModWaveforms && channel == 1 && modWaveforms.size() <= 30) MakeTheMarkers(hitCandVec);
 }
+
+/*
+ *  This method creates the markers for the graphs.
+ *
+ */
 
 void FileReader::MakeTheMarkers(const HitCandidateVec& hitCandVec)
 {
   std::vector<std::pair<TMarker,TMarker>> mks;
   for (const auto& hit : hitCandVec)
   {
-    TMarker mMax(hit.hitPeakTick, hit.hitPeak, 23);
-    TMarker mMin(hit.startTick, hit.hitBase, 23);
+    TMarker mMax(hit.stopTick, hit.stopTickAmp, 23);
+    TMarker mMin(hit.startTick, hit.startTickAmp, 23);
     mMax.SetMarkerColor(4);
     mMax.SetMarkerSize(1.5);
     mMin.SetMarkerColor(4);

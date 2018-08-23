@@ -436,10 +436,10 @@ void SaveCharacterizationPlots(std::map<unsigned, std::vector<TH1D>>         amp
       // Amplitude dist
       masterAmpDist.cd(ampCounter);
       gStyle->SetOptStat(0);
-      dist.GetXaxis()->SetTitle("Amplitude/Volts");
+      dist.GetXaxis()->SetTitle("Integral/a.u.");
       dist.Draw();
       masterAmpDist.Update();
-      dist.GetXaxis()->SetTitle("Amplitude/Volts"); 
+      dist.GetXaxis()->SetTitle("Area/a.u."); 
       masterAmpDist.Modified();
       ampCounter++;
     }

@@ -77,6 +77,91 @@ void WaveformAlg::SmoothWaveform2(std::vector<float>& signal, const Configuratio
   }
 }
 
+/* 
+ *  This algorithm will find and integrate hits in our waveform.
+ *
+ **/
+void WaveformAlg::FindHits(std::vector<float>   waveform,
+                           size_t               channel,
+                           const float&         bias,
+                           HitCandidateVec&     hitCandVec,
+                           const Configuration& config)
+{
+  // Get the offset setting
+  unsigned    configOffset    = config.hitFinderSearch;
+  // Get noise params --> (mean, extrapolation)
+  const auto  noiseParameters  = ComputeNoise(waveform, config);
+  const float hitThreshold     = std::max( noiseParameters[2], config.minimumHitAmp ); 
+  const float hitLeadThreshold = noiseParameters[0] + noiseParameters[1];
+  // Find the highest peak in the range given
+  auto  maxItr   = std::max_element(waveform.begin(), waveform.end());
+  float maxValue = *maxItr;
+  int   maxTick  = std::distance(waveform.begin(), maxItr);
+  // Check if above threshold
+  //std::cout << "hitthresh = " << hitThreshold << "  leadthr = " << hitLeadThreshold << std::endl;
+  while (maxValue >= hitThreshold) 
+  {
+    //std::cout << maxValue << std::endl;
+    // Initialize parameters
+    int startTick(maxTick), stopTick(maxTick);
+    bool foundStartTick(false), foundStopTick(false);
+    // Loop to find the start/stop tick of the hit
+    while ( !(foundStartTick && foundStopTick) ) 
+    {
+      // Start tick. Only look if we haven't found it yet.
+      if (!foundStartTick) 
+      {
+        startTick = startTick - configOffset;
+        // If we've gone outside range, we've missed this hit, so ignore it
+        if (startTick < 0) break;
+        // Check if this is an inflection point and crossed threshold
+        if ( (waveform[startTick+configOffset] - waveform[startTick])/configOffset < 0.0001
+             && waveform[startTick] < hitLeadThreshold) foundStartTick = true;
+      }
+      // Stop tick. Only look if we haven't found it yet.
+      if (!foundStopTick)
+      {
+        stopTick = stopTick + configOffset;
+        // If we've gone outside sample range, we've missed the hit, so ignore it
+        if (stopTick >= waveform.size()) break;
+        // Check whether we've crossed the threshold
+        if (waveform[stopTick] < hitLeadThreshold) foundStopTick = true;
+      }
+    }
+    // Check if we've found both stop/fall
+    if (foundStartTick && foundStopTick) 
+    {
+      //std::cout << "Channel " << channel << "  at " << posPeakSample << "   thr " << thrPosPeak << std::endl;
+      // Loop over all tick to integrate them
+      float hitIntegral(0);
+      for (unsigned tick = startTick; tick <= stopTick; ++tick) hitIntegral += waveform[tick];
+      // Build this hit
+      HitCandidate hitCandidate;
+			hitCandidate.startTick     = startTick;
+			hitCandidate.stopTick      = stopTick;
+      hitCandidate.startTickAmp  = waveform[startTick];
+      hitCandidate.stopTickAmp   = waveform[stopTick];
+			hitCandidate.hitBase       = hitLeadThreshold;
+			hitCandidate.hitPeakTick   = maxTick;
+			hitCandidate.hitPeak       = maxValue;
+			hitCandidate.hitAmplitude  = maxValue - hitLeadThreshold;
+      hitCandidate.hitIntegral   = hitIntegral;
+			hitCandidate.bias          = bias;
+      // Add to out hit vec
+			hitCandVec.push_back(hitCandidate);			       
+    }
+    // Replace this area with noise 
+    if (startTick < 0)               startTick = 0;
+    if (stopTick >= waveform.size()) stopTick  = waveform.size() - 1;
+    // Replace this hit with baseline
+    for (unsigned tick = startTick; tick <= stopTick; ++tick) waveform[tick] = hitLeadThreshold;;
+    // Find the next potential hit
+    maxItr   = std::max_element(waveform.begin(), waveform.end());
+    maxValue = *maxItr;
+    maxTick  = std::distance(waveform.begin(), maxItr);
+  }      
+}
+
 void WaveformAlg::FindHitCandidates(std::vector<float>&  waveform,
                                     size_t               roiStartTick,
                                     size_t               channel,
@@ -95,7 +180,7 @@ void WaveformAlg::FindHitCandidates(std::vector<float>&  waveform,
 
 void WaveformAlg::FindHitCandidates(std::vector<float>::const_iterator startItr,
                                     std::vector<float>::const_iterator stopItr,
-                                    const std::pair<float, float>&     noiseParameters,
+                                    const std::vector<float>&          noiseParameters,
                                     const float&                       bias,
                                     size_t                             roiStartTick,
 		                                HitCandidateVec&                   hitCandVec,
@@ -111,7 +196,7 @@ void WaveformAlg::FindHitCandidates(std::vector<float>::const_iterator startItr,
     float maxValue = *maxItr;
     int   maxTime  = std::distance(startItr,maxItr);
     // Hit threshold
-    float hitThreshold = std::max( noiseParameters.second, config.minimumHitAmp ); 
+    float hitThreshold = std::max( noiseParameters[2], config.minimumHitAmp ); 
 
     //std::cout << noiseParameters.second << "  " << config.minimumHitAmp << "  " << maxValue << std::endl;
 
@@ -166,7 +251,7 @@ void WaveformAlg::FindHitCandidates(std::vector<float>::const_iterator startItr,
   return;
 }
 
-std::pair<float, float> WaveformAlg::ComputeNoise(std::vector<float>& signal, const Configuration& config)
+std::vector<float> WaveformAlg::ComputeNoise(std::vector<float>& signal, const Configuration& config)
 {
   // Find min and max of this signal for number of bins
   auto min_max = std::minmax_element( signal.begin(), signal.end() );
@@ -196,8 +281,9 @@ std::pair<float, float> WaveformAlg::ComputeNoise(std::vector<float>& signal, co
   line.SetParameters(y,slope,x);
   TF1 fint("fint", "TMath::Abs(0-line)", gauss.GetParameter(1), max);
 
-  double baselineInter = fint.GetMinimumX();
-  return std::pair<double, double>(gauss.GetParameter(1), baselineInter);
+  float baselineInter = fint.GetMinimumX();
+  std::vector<float> vec = {gauss.GetParameter(1), gauss.GetParameter(2), baselineInter};
+  return vec;
 }
 
 }

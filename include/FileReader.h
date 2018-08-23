@@ -24,6 +24,12 @@ public:
   FileReader();
   ~FileReader();
 
+  void Analyze(std::vector<float>&  waveform, 
+               HitCandidateVec&     hitCandidateVec, 
+               const std::string&   filename, 
+               const float&         bias, 
+               const unsigned&      channel, 
+               const Configuration& config);
   // For reco  
   void ReadFiles(SiPMToTriggerMap&           sipmToTriggerMap, 
                  const SiPMToFilesMap&       map, 
