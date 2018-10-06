@@ -11,6 +11,9 @@
 #include <cmath>
 #include "TH1.h"
 #include "TF1.h"
+#include "TGraph.h"
+#include "TFile.h"
+#include "TCanvas.h"
 
 namespace wheel {
 
@@ -98,7 +101,7 @@ void WaveformAlg::FindHits(std::vector<float>   waveform,
   float maxValue = *maxItr;
   int   maxTick  = std::distance(waveform.begin(), maxItr);
   // Check if above threshold
-  //std::cout << "hitthresh = " << hitThreshold << "  leadthr = " << hitLeadThreshold << std::endl;
+  //std::cout << "hitthresh = " << hitThreshold << "  leadthr = " << hitLeadThreshold << "  max = " << maxValue << std::endl;
   while (maxValue >= hitThreshold) 
   {
     //std::cout << maxValue << std::endl;
@@ -115,7 +118,7 @@ void WaveformAlg::FindHits(std::vector<float>   waveform,
         // If we've gone outside range, we've missed this hit, so ignore it
         if (startTick < 0) break;
         // Check if this is an inflection point and crossed threshold
-        if ( (waveform[startTick+configOffset] - waveform[startTick])/configOffset < 0.0001
+        if ( (waveform[startTick+configOffset] - waveform[startTick])/configOffset < 0.000001
              && waveform[startTick] < hitLeadThreshold) foundStartTick = true;
       }
       // Stop tick. Only look if we haven't found it yet.
@@ -129,7 +132,9 @@ void WaveformAlg::FindHits(std::vector<float>   waveform,
       }
     }
     // Check if we've found both stop/fall
-    if (foundStartTick && foundStopTick) 
+    // Let's try to fit this pulse as well
+    // If it's not a nice fit, then do not store this
+    if (foundStartTick && foundStopTick && GoodFit(waveform, maxTick, maxValue,  startTick, stopTick)) 
     {
       //std::cout << "Channel " << channel << "  at " << posPeakSample << "   thr " << thrPosPeak << std::endl;
       // Loop over all tick to integrate them
@@ -160,6 +165,49 @@ void WaveformAlg::FindHits(std::vector<float>   waveform,
     maxValue = *maxItr;
     maxTick  = std::distance(waveform.begin(), maxItr);
   }      
+}
+
+bool WaveformAlg::GoodFit(const std::vector<float>& waveform, 
+                          const int& maxTick, 
+                          const float& maxValue,
+                          const int& startTick, 
+                          const int& stopTick)
+{
+  // Two fits here:
+  //  1) Rising edge  (startTick -> MaxTick)
+  //  2) Falling edge (maxTick   -> stopTick)
+  // 
+  // Make a TGraph for this hit
+  TGraph g;
+  unsigned p(1);
+  for (unsigned tick = startTick; tick <= stopTick; tick++)
+  {
+    g.SetPoint(p, tick - startTick, waveform[tick]);
+    p++;
+  }
+  TF1 rise("rise", "[0]*( 1 - TMath::Exp(-x/[1]) )", 0, maxTick-startTick);
+  TF1 fall("fall", "[0]*TMath::Exp(-x/[1])", maxTick-startTick, stopTick-startTick);
+  rise.SetParameters(maxValue, 100);
+  fall.SetParameters(maxValue, 100);
+  g.Fit(&rise, "QNR");
+  g.Fit(&fall, "QNR");
+   
+  // Make sure the fit to tail is nice
+  if (rise.GetChisquare() < 0.00045 && fall.GetChisquare() < 0.00045) 
+  {
+    std::cout << rise.GetChisquare() << "  " << fall.GetChisquare() << std::endl;
+    std::string name =  "/home/hunter/projects/wheel/output/fitFile.root";
+    TFile f(name.c_str(), "Update");
+    TCanvas c("c", "c", 800, 800);
+    g.SetMarkerStyle(8);
+    g.Draw("ap");
+    rise.Draw("same");
+    fall.Draw("same");
+    c.Write();
+
+    return true;
+  }
+  return false;
 }
 
 void WaveformAlg::FindHitCandidates(std::vector<float>&  waveform,

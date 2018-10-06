@@ -23,6 +23,11 @@ public:
   
   void SmoothWaveform(std::vector<float>& signal, const wheel::Configuration& config);
   void SmoothWaveform2(std::vector<float>& signal, const wheel::Configuration& config);
+  bool GoodFit(const std::vector<float>& waveform,
+               const int& maxkTick,
+               const float& maxValue,
+               const int& startTick,
+               const int& stopTick);
   void FindHits(std::vector<float>   waveform,
                 size_t               channel,
                 const float&         bias,
