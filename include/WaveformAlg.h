@@ -28,6 +28,8 @@ public:
                const float& maxValue,
                const int& startTick,
                const int& stopTick);
+  void ApplyFits(HitCandidateVec& hitCandVecFits, const MergeHitCandidateVec& mergedHitsVec);
+  void ApplyFits(HitCandidateVec& hitCandVecFits, const HitCandidateVec& hitCandidateVec);
   void FindHits(std::vector<float>   waveform,
                 size_t               channel,
                 const float&         bias,
@@ -39,6 +41,9 @@ public:
                          const float&                bias,
     		                 wheel::HitCandidateVec&     hitCandVec,
                          const wheel::Configuration& config); 
+  void MergeHitCandidates(const std::vector<float>& signalVec,
+                          const HitCandidateVec&    hitCandidateVec,
+                          MergeHitCandidateVec&     mergedHitsVec); 
 
 private:
 

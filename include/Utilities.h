@@ -43,6 +43,7 @@ struct SiPMInfo
 
 
 using HitCandidateVec      = std::vector<HitCandidate>;
+using MergeHitCandidateVec = std::vector<HitCandidateVec>;
 using SiPMToHitCandVecMap  = std::map<unsigned, HitCandidateVec>;
 using SiPMToFilesMap       = std::map<unsigned, std::set<std::string>>;
 using SiPMToTriggerMap     = std::map<unsigned, std::vector<HitCandidateVec>>;

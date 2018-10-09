@@ -64,7 +64,6 @@ int main(int argc, char **argv)
   wheel::Configuration myConfig;
   myConfig.pathToConfig = argv[1];
   ReadConfigFile(myConfig);
-
   OutputConfigInfo(myConfig);
 
   //const std::string process = argv[2];
