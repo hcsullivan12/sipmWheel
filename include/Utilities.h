@@ -59,35 +59,37 @@ using MarkerPairVec        = std::vector<std::vector<std::pair<TMarker,TMarker>>
 
 struct Configuration 
 {
-  std::string      pathToData;
-  std::string      rawWaveformPath;
-  std::string      modWaveformPath;
-  std::string      pathToConfig;
-  std::string      recoOutputFile;
-  bool             printFiles;
-  bool             baselineSubtract;
-  bool             saveRawWaveforms;
-  bool             saveModWaveforms;
-  unsigned         nSiPMs;
-  unsigned         smaRange;
-  unsigned         resolution;
-  float            hitSigma;
-  unsigned         hitFinderSearch;
-  float            minimumHitAmp;
-  std::string      process;
+  std::string      pathToData;                         ///< Path to csv data files
+  std::string      rawWaveformPath;                    ///< Output path for raw waveforms
+  std::string      modWaveformPath;                    ///< Output path for modified waveforms
+  std::string      pathToConfig;                       ///< Path to configuration file
+  std::string      recoOutputFile;                     ///< Output path for reconstruction results
+  bool             printFiles;                         ///< Option to print out data files
+  bool             baselineSubtract;                   ///< Option to baseline subtract
+  bool             saveRawWaveforms;                   ///< Option to save raw waveforms
+  bool             saveModWaveforms;                   ///< Option to save modified waveforms
+  unsigned         nSiPMs;                             ///< Number of sipms 
+  unsigned         smaRange;                           ///< Range around center for applying average on waveform
+  unsigned         resolution;                         ///< Resolution to keep on waveform
+  float            hitSigma;                           ///< 
+  unsigned         hitFinderSearch;                    
+  float            minimumHitAmp;                      ///< Hit threshold
+  std::string      process;                            ///< Process: Reconstruction or characterization
   float            characterizeAmpThr;
   float            characterizeAmpSig;
   float            characterizeAmpFitRange;
   std::string      characterizeOutputFile;
-  unsigned         nFilesCharacterize;
-  unsigned                  nBiases;
-  std::set<float>           biases;
-  std::map<unsigned, float> gains;
-  std::map<unsigned, float> breakdowns;
-  float                     thetaBinSize;
+  unsigned         nFilesCharacterize;                 ///< Number of files to use from data
+  unsigned                  nBiases;                   ///< Number of biases used
+  std::set<float>           biases;                    ///< The bias values (in V)
+  std::map<unsigned, float> gains;                     ///< SiPM gains (in mV/p.e./O.V.)
+  std::map<unsigned, float> breakdowns;                ///< SiPM breakdowns (in V)
+  float                     thetaBinSize;              
   float                     radiusBinSize;
   float                     attenuationLengthBinSize;
-  float                     diskRadius;
+  float                     diskRadius;                ///< Disk radius for reconstruction (in cm)
+  float                     attenuationLength;         ///< Attenuation length for disk (in cm)
+  unsigned                  nVoxels;                   ///< Number of voxels to segment the disk geometry (=NxN)
 };
 }
 

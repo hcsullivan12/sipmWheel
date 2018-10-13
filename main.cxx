@@ -31,6 +31,7 @@
 #include "FileReader.h"
 #include "Analyzer.h"
 #include "Characterizer.h"
+#include "Reconstructor.h"
 
 // Prototypes
 void PrintTheFiles(const wheel::SiPMToFilesMap& sipmToFilesMap);
@@ -106,6 +107,8 @@ void OutputConfigInfo(wheel::Configuration& config)
             << "ThetaBinSize        " << config.thetaBinSize                   << std::endl
             << "RadiusBinSize       " << config.radiusBinSize                  << std::endl
             << "AttenLengthBinSize  " << config.attenuationLengthBinSize       << std::endl
+            << "nVoxels             " << config.nVoxels                        << std::endl
+            << "AttenuationLength   " << config.attenuationLength              << std::endl
             << "DiskRadius          " << config.diskRadius                     << std::endl;
   std::cout << std::setfill('-') << std::setw(80) << "-" << std::setfill(' ') << std::endl;
   std::cout << std::endl;
@@ -179,10 +182,12 @@ void Reco(const wheel::Configuration& myConfig)
     // Option to output a few waveforms
     if (trigger == 1) SaveWaveforms(fr, myConfig);
   
-    wheel::Analyzer analyzer;
-    analyzer.RunReco(sipmToTriggerMap, sipmInfoMap, myConfig, trigger);
+    //wheel::Analyzer analyzer;
+    //analyzer.RunReco(sipmToTriggerMap, sipmInfoMap, myConfig, trigger);
+    wheel::Reconstructor reconstructor;
+    reconstructor.Reconstruct(sipmToTriggerMap, sipmInfoMap, myConfig, trigger);
     // Now make the plots
-    MakeRecoPlots(analyzer, myConfig, trigger);
+    //MakeRecoPlots(analyzer, myConfig, trigger);
   }
 }
 
@@ -276,6 +281,8 @@ void ReadConfigFile(wheel::Configuration& config)
     else if (header == "radiusBinSize")           config.radiusBinSize = std::stof(value);
     else if (header == "attenuationLengthBinSize") config.attenuationLengthBinSize = std::stof(value);
     else if (header == "diskRadius")              config.diskRadius = std::stof(value);
+    else if (header == "attenuationLength")       config.attenuationLength = std::stof(value); 
+    else if (header == "nVoxels")                 config.nVoxels    = std::stoi(value);
     else    { std::cout << "Cannot identify " << header << std::endl; exit(1); }
   }
   

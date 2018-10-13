@@ -101,7 +101,7 @@ void WaveformAlg::FindHits(std::vector<float>   waveform,
   float maxValue = *maxItr;
   int   maxTick  = std::distance(waveform.begin(), maxItr);
   // Check if above threshold
-  //std::cout << "hitthresh = " << hitThreshold << "  leadthr = " << hitLeadThreshold << "  max = " << maxValue << std::endl;
+  std::cout << "hitthresh = " << hitThreshold << "  leadthr = " << hitLeadThreshold << "  max = " << maxValue << std::endl;
   while (maxValue >= hitThreshold) 
   {
     //std::cout << maxValue << std::endl;
@@ -136,7 +136,7 @@ void WaveformAlg::FindHits(std::vector<float>   waveform,
     // If it's not a nice fit, then do not store this
     if (foundStartTick && foundStopTick && GoodFit(waveform, maxTick, maxValue,  startTick, stopTick)) 
     {
-      //std::cout << "Channel " << channel << "  at " << posPeakSample << "   thr " << thrPosPeak << std::endl;
+      std::cout << "Here\n";
       // Loop over all tick to integrate them
       float hitIntegral(0);
       for (unsigned tick = startTick; tick <= stopTick; ++tick) hitIntegral += waveform[tick];

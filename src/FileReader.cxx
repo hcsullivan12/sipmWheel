@@ -90,20 +90,25 @@ void FileReader::ReadFiles(SiPMToTriggerMap& sipmToTriggerMap,
   }
 }
 
+/*
+ *  The method extracts the waveform from the data file
+ *
+ */
 void FileReader::ReadFile(HitCandidateVec& hitCandidateVec, const std::string& filename, const float& bias, const unsigned& channel, const Configuration& config)
 {
   // Open the file
   std::ifstream file(filename.c_str());
-  if (!file.is_open()) {
+  if (!file.is_open()) 
+  {
     std::cout << "Cannot open file: " << filename << std::endl;
     return;
   }
   std::string word = "";
   std::vector<float> signal;
+
   // Skip first text in file
-  /*while (word != "Time,Ampl") {
-    file >> word;
-  }*/
+  while (word != "Time,Ampl") file >> word;
+  
   std::getline(file, word); std::getline(file, word);
   int counter = 0;
   int push = 0;
@@ -117,7 +122,7 @@ void FileReader::ReadFile(HitCandidateVec& hitCandidateVec, const std::string& f
     std::getline(file, yTemp, ',');
     counter++;
 
-    signal.push_back( -1*atof(yTemp.c_str()) );
+    signal.push_back( atof(yTemp.c_str()) );
   }
   
   // Analyze this waveform
@@ -193,7 +198,7 @@ void FileReader::MakeTheMarkers(const HitCandidateVec& hitCandVec)
   std::vector<std::pair<TMarker,TMarker>> mks;
   for (const auto& hit : hitCandVec)
   {
-    std::cout << "Hit start = " << hit.startTickAmp << "  hit stop = " << hit.stopTickAmp << std::endl;
+    //std::cout << "Hit start = " << hit.startTickAmp << "  hit stop = " << hit.stopTickAmp << std::endl;
     TMarker mMax(hit.stopTick, hit.stopTickAmp, 23);
     TMarker mMin(hit.startTick, hit.startTickAmp, 23);
     mMax.SetMarkerColor(4);

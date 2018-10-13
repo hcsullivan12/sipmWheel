@@ -189,16 +189,25 @@ float Analyzer::ComputeLikelihood(const float& r, const float& theta, const unsi
 
 float Analyzer::ComputeLambda(const float& r, const float& theta, const unsigned& N0, const unsigned& m, const float& attenuationLength)
 {
-  ///lambda_m = N0e^( -r_m/attenuationLength )
+  // Equation using here...
+  // 
+  // I(r,theta) = (I_0/r_m)*cos(theta)*exp(-r_m/attenuationLength)
+  // 
+  // where I(r,0) ~ NPhotons(r,theta)
+
   // Convert angle to radians 
-  const double angleRad   = ( (m - 1)*p_beta - theta )*( TMath::Pi()/180 );
-  const double r_mSquared = r*r + p_diskRadius*p_diskRadius - 2*r*p_diskRadius*TMath::Cos( angleRad );
-  if (r_mSquared < 0) {
+  const float angleRad   = ( (m - 1)*p_beta - theta )*( TMath::Pi()/180 );
+  const float r_mSquared = r*r + p_diskRadius*p_diskRadius - 2*r*p_diskRadius*TMath::Cos( angleRad );
+  
+  if (r_mSquared < 0) 
+  {
     std::cout << "Error! Square root of negative number!\n";
     return 0;
   }
-  const double r_m = TMath::Sqrt( r_mSquared );
-  const double lambda_m = N0*TMath::Exp( -r_m/attenuationLength )/(r_m);
+  const float r_m = TMath::Sqrt( r_mSquared );
+  // Get the angle between r_m and the normal for this position
+  const float CosAlpha   = (-r*r + r_mSquared + p_diskRadius*p_diskRadius)/(2*r_m*p_diskRadius);
+  const float lambda_m   = N0*CosAlpha*TMath::Exp( -r_m/attenuationLength )/(r_m);
 
   return lambda_m;
 }
