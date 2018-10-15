@@ -107,7 +107,7 @@ void Reconstructor::InitVoxelList()
     voxel.SetProbabilityMap(probabilityMap);
     voxelCounter++;
   }
-  voxelCounter = 0;
+  /*voxelCounter = 0;
   for (auto& voxel : m_voxelList)
   {
     // Probability map for this voxel
@@ -118,7 +118,7 @@ void Reconstructor::InitVoxelList()
     }
     voxel.SetProbabilityMap(probabilityMap);
     voxelCounter++;
-  }
+  }*/
 }
 
 float Reconstructor::ComputeWeight(const unsigned& sipm, const float& x, const float& y)
@@ -138,6 +138,10 @@ float Reconstructor::ComputeWeight(const unsigned& sipm, const float& x, const f
   // Compute angle between sipm normal and v = (x,y), and distance from (x,y) to sipm
   float r                 = std::sqrt(x*x + y*y);
   float thetaDeg          = std::abs(TMath::ASin(y/r))*180/TMath::Pi();
+  // Integral 
+  float b                 = 2*m_diskRadius/m_attenuationLength;
+  float pi                = TMath::Pi();
+  float integralNorm      = m_attenuationLength*(2 - 0.467289);
   // Handle theta convention
   // 2nd quadrant
   if (x < 0 && y > 0) thetaDeg += 90;
@@ -166,7 +170,7 @@ float Reconstructor::ComputeWeight(const unsigned& sipm, const float& x, const f
   float relativeWeight = 1*cosAngleSiPMToXYandSiPM*TMath::Exp(-sipmToXY/m_attenuationLength)/sipmToXY;
   //std::cout << "Weight = " << relativeWeight << "  at sipm " << sipm << " from x = " << x << " y = " << y << "  sipmToXY = " << sipmToXY << " angleXYandSIPM = " << angleXYandSiPMRad*180/TMath::Pi() << " beta = " << m_beta << "  thetaDeg = " << thetaDeg <<std::endl;
   if (relativeWeight < 0) { std::cout << "UH OH! WEIGHT < 0!!\n"; std::exit(1); }
-  return relativeWeight;
+  return relativeWeight/integralNorm;
 }
 
 void Reconstructor::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const unsigned& trigger)
@@ -185,7 +189,11 @@ void Reconstructor::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMIn
   
   // We have our first estimate, now let's make our next estimate
   unsigned iterator(1);
-  //MakeNextEstimate(iterator); 
+  MakeNextEstimate(iterator); 
+
+  clock_t stop = clock();
+  double runtime = ((double) (stop - start)) / CLOCKS_PER_SEC;
+
 }
 
 void Reconstructor::FirstEstimate(const std::pair<unsigned, unsigned>& maxSiPM_counts)
@@ -248,13 +256,16 @@ void Reconstructor::MakeNextEstimate(unsigned& iterator)
     const auto probMap = voxel.ProbabilityMap();
     for (unsigned sipm = 1; sipm <= m_nSiPMs; sipm++)
     {
-      num += probMap.find(sipm)->second*voxel.OldIntensity()*m_data[sipm-1]/numDenom[sipm-1];
+      std::cout << "X = " << voxel.X() << "  Y = " << voxel.Y() << " sipm = " << sipm << "  prob = " << probMap.find(sipm)->second << "  numDenom = " << numDenom[sipm-1] << std::endl;
+      num += probMap.find(sipm)->second*m_data[sipm-1]/numDenom[sipm-1];
     }
+    std::cout << "Num before = " << num << std::endl;
+    num = num*voxel.OldIntensity();
     // Denominator
     for (const auto& sipmWeight : probMap) denom += sipmWeight.second;
     
     float newEstimate = num/denom;
-    //std::cout << "Num = " << num << "  denom = " << denom << std::endl;
+    //std::cout << "X = " << voxel.X() << "  Y = " << voxel.Y() << " Num = " << num << "  denom = " << denom << "  num/denom = " << num/denom << std::endl;
     voxel.SetNewIntensity(newEstimate);
   }
 
@@ -264,7 +275,7 @@ void Reconstructor::MakeNextEstimate(unsigned& iterator)
 
   // If we're not happy with this, re-estimate
   std::cout << "Epsilon = " << eps << std::endl;
-  if (iterator < 20/*m_epsilonConvergence*/) 
+  if (iterator < 3/*m_epsilonConvergence*/) 
   { 
     iterator++;
     // Update our estimates 
