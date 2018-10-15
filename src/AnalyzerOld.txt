@@ -20,12 +20,12 @@ Analyzer::~Analyzer()
 void Analyzer::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const Configuration& config, const unsigned& trigger)
 {
   // Initialize parameters
-  Init(config);
+  Init();
   // Start reconstruction
   Reconstruct(sipmToTriggerMap, sipmInfoMap, trigger);
 }
 
-void Analyzer::Init(const Configuration& config)
+void Analyzer::Init()
 {
   // Initialize
   m_thetaBinSize      = config.thetaBinSize;
@@ -36,7 +36,7 @@ void Analyzer::Init(const Configuration& config)
   m_beta              = 360/config.nSiPMs;
   m_nSiPMs            = config.nSiPMs;
   m_mlLikelihood      = std::numeric_limits<float>::lowest();
-  m_mlRadius = 0; m_mlTheta = 0; m_mlN0 = 0; 
+  m_mlRadius(0); m_mlTheta(0); m_mlN0(0); //m_mlAttenuationLength(0);
   m_data.clear();
 }
 
@@ -60,14 +60,23 @@ void Analyzer::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap
  
   // We should have the ml now
   // Loop again and fill the accumulator map
-  // for mle N0 
+  // for mle N0 and attenuation length
   FillAccumulatorMap(); 
-  // Maximum is at the end
-  unsigned ID = m_accumulatorMap.size()-1;
+
+  // Now find the maximum
+  float max = std::numeric_limits<float>::lowest();;
+  unsigned ID(0);
+  for (unsigned index = 0; index < m_accumulatorMap.size(); index++)
+  {
+    if (m_accumulatorMap[index].second.find("likelihood")->second > max) { max = m_accumulatorMap[index].second.find("likelihood")->second; ID = index; } 
+  }
+ 
+  //std::cout << std::endl
   std::cout << "Max likelihood = " << m_accumulatorMap[ID].second.find("likelihood")->second        << std::endl
             << "Radius         = " << m_accumulatorMap[ID].second.find("radius")->second            << " cm\n"
             << "Theta          = " << m_accumulatorMap[ID].second.find("theta")->second             << " deg\n"
-            << "N0             = " << m_accumulatorMap[ID].first                                    << " photons\n";
+            << "N0             = " << m_accumulatorMap[ID].first                                    << " photons\n"
+            << "Attenuation    = " << m_accumulatorMap[ID].second.find("attenuationLength")->second << " cm\n";
  
   clock_t end = clock();
   double duration = ((double) (end - start)) / CLOCKS_PER_SEC;
@@ -83,6 +92,7 @@ void Analyzer::Handle(const unsigned& N0)
   // Start with r = 0, theta = 0, (N0 is what's passed) and increment by the constants defined above
   float radius(0);
   float theta(0);
+  float attenuationLength(0); // not using at the moment
 
   //std::cout << "N0: " << N0 << std::endl;
   while ( radius <= m_diskRadius ) 
@@ -94,9 +104,9 @@ void Analyzer::Handle(const unsigned& N0)
       // let's only fill the accumulator map 
       // with the max likelihood iterations
       // So find the N0 and attenL that correspond to ML
-      float likelihood = ComputeLikelihood(radius, theta, N0);
+      float likelihood = ComputeLikelihood( radius, theta, N0, attenuationLength );
       //std::cout << likelihood << std::endl;
-      if ( likelihood > m_mlLikelihood) { m_mlLikelihood = likelihood; m_mlN0 = N0; m_mlRadius = radius; m_mlTheta = theta; } 
+      if ( likelihood > m_mlLikelihood) { m_mlLikelihood = likelihood; m_mlN0 = N0; m_mlRadius = radius; m_mlTheta = theta; /*m_attenuationLength = attenuationLength;*/ } 
         
       theta = theta + m_thetaBinSize;
     }
@@ -106,6 +116,43 @@ void Analyzer::Handle(const unsigned& N0)
   radius = 0;
   //std::cout << "ML " << m_likelihood << "  atten: " << m_attenuationLength << "  radius " << m_radius << "  theta " << m_theta << "  N0 " << m_N0 << std::endl;
 }
+
+/*
+void Analyzer::Handle(const unsigned& N0)
+{
+  // Variables used for incrementing
+  // Start with r = 0, theta = 0, (N0 is what's passed) and increment by the constants defined above
+  float radius(0);
+  float theta(0);
+  float attenuationLength(0); // not using at the moment
+
+  //std::cout << "N0: " << N0 << std::endl;
+  //while (attenuationLength <= 40)
+  {
+    //std::cout << "mu: " << attenuationLength << std::endl;
+    while ( radius <= m_diskRadius ) 
+    {
+      //std::cout << "radius: " << radius << std::endl;
+      while ( theta < 360 ) 
+      {
+        // Since there are so many iterations here,
+        // let's only fill the accumulator map 
+        // with the max likelihood iterations
+        // So find the N0 and attenL that correspond to ML
+        float likelihood = ComputeLikelihood( radius, theta, N0, attenuationLength );
+        //std::cout << likelihood << std::endl;
+        if ( likelihood > m_mlLikelihood) { m_mlLikelihood = likelihood; m_mlN0 = N0; m_mlRadius = radius; m_mlTheta = theta; m_attenuationLength = attenuationLength; } 
+        
+        theta = theta + m_thetaBinSize;
+      }
+      theta = 0;
+      radius = radius + m_radiusBinSize;
+    }
+    radius = 0;
+    //attenuationLength = attenuationLength + m_attenuationLengthBinSize;
+  }
+  //std::cout << "ML " << m_likelihood << "  atten: " << m_attenuationLength << "  radius " << m_radius << "  theta " << m_theta << "  N0 " << m_N0 << std::endl;
+}*/
 
 void Analyzer::FillAccumulatorMap()
 {
@@ -119,13 +166,12 @@ void Analyzer::FillAccumulatorMap()
     while ( theta < 360 ) 
     {
       // Compute likelihood using the N0 and attenL for ml already found
-      float likelihood = ComputeLikelihood(radius, theta, m_mlN0);
+      float likelihood = ComputeLikelihood( radius, theta, m_N0, m_attenuationLength );
 
       std::map<std::string, float> params;
-      params.emplace("radius", radius);         
-      params.emplace("theta", theta); 
-      params.emplace("likelihood", likelihood); 
-      m_accumulatorMap.emplace_back(m_mlN0, params);
+      params.emplace("radius", radius);         params.emplace("theta", theta); 
+      params.emplace("likelihood", likelihood); params.emplace("attenuationLength", m_attenuationLength);
+      m_accumulatorMap.emplace_back(m_N0, params);
 
       theta = theta + m_thetaBinSize;
     }
@@ -137,6 +183,52 @@ void Analyzer::FillAccumulatorMap()
   std::sort(m_accumulatorMap.begin(), m_accumulatorMap.end(), 
             [](const BinIndex& biL, const BinIndex& biR) 
             {return biL.second.find("likelihood")->second < biR.second.find("likelihood")->second;});
+}
+
+void Analyzer::WheelReco(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const unsigned& trigger)
+{
+  // Start the timer for this trigger
+  clock_t start = clock();
+
+  // First to cound number of photons in each hit
+  // also N0 set to lower threshold to decrease computation time
+  const auto maxSiPM_counts = InitData(sipmToTriggerMap, sipmInfoMap, trigger);
+  unsigned N0 = maxSiPM_counts.second;
+
+  std::cout << "Running MLE...\n";
+
+  while ( N0 <= 300 ) 
+  {
+    Handle(N0);
+    N0++;
+  }
+ 
+  // We should have the ml now
+  // Loop again and fill the accumulator map
+  // for mle N0 and attenuation length
+  FillAccumulatorMap(); 
+
+  // Now find the maximum
+  float max = std::numeric_limits<float>::lowest();;
+  unsigned ID(0);
+  for (unsigned index = 0; index < m_accumulatorMap.size(); index++)
+  {
+    if (m_accumulatorMap[index].second.find("likelihood")->second > max) { max = m_accumulatorMap[index].second.find("likelihood")->second; ID = index; } 
+  }
+ 
+  //std::cout << std::endl
+  std::cout << "Max likelihood = " << m_accumulatorMap[ID].second.find("likelihood")->second        << std::endl
+            << "Radius         = " << m_accumulatorMap[ID].second.find("radius")->second            << " cm\n"
+            << "Theta          = " << m_accumulatorMap[ID].second.find("theta")->second             << " deg\n"
+            << "N0             = " << m_accumulatorMap[ID].first                                    << " photons\n"
+            << "Attenuation    = " << m_accumulatorMap[ID].second.find("attenuationLength")->second << " cm\n";
+ 
+  clock_t end = clock();
+  double duration = ((double) (end - start)) / CLOCKS_PER_SEC;
+  std::cout << "Run time of " << duration << " s" << std::endl;
+
+  // Add these parameters to our mle vec
+  m_mleParameters.emplace_back(m_accumulatorMap[ID].first, m_accumulatorMap[ID].second);
 }
 
 std::pair<unsigned, unsigned> Analyzer::InitData(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const unsigned& trigger)
@@ -170,21 +262,21 @@ std::pair<unsigned, unsigned> Analyzer::InitData(SiPMToTriggerMap& sipmToTrigger
   return std::make_pair(maxSiPM, max);
 }
 
-float Analyzer::ComputeLikelihood(const float& r, const float& theta, const unsigned& N0)
+float Analyzer::ComputeLikelihood(const float& r, const float& theta, const unsigned& N0, const float& attenuationLength)
 {
   // Sum over terms ----> k_m*ln(lambda_m) - lambda_m - ln(k_m!)
   float sum = 0;
-  for (int sipm = 1; sipm <= m_nSiPMs; sipm++) {
-    float lambda_m = ComputeLambda(r, theta, N0, sipm);
+  for (int m = 1; m <= m_nSiPMs; m++) {
+    float lambda_m = ComputeLambda( r, theta, N0, m, attenuationLength );
     //std::cout << "nPhotons: " << m_data.find(m)->second << "  lambda_m " << lambda_m << "   factorial " << TMath::Factorial(m_data.find(m)->second) << "  term ";
-    float term = m_data.find(sipm)->second*log(lambda_m) - lambda_m - log(TMath::Factorial(m_data.find(sipm)->second));
+    float term = m_data.find(m)->second*log( lambda_m ) - lambda_m - log(TMath::Factorial(m_data.find(m)->second));
     //std::cout << term << std::endl;
     sum = sum + term;
   }
   return sum;
 }
 
-float Analyzer::ComputeLambda(const float& r, const float& theta, const unsigned& N0, const unsigned& sipm)
+float Analyzer::ComputeLambda(const float& r, const float& theta, const unsigned& N0, const unsigned& sipm, const float& attenuationLength)
 {
   // Assumptions:
   //    1) Only bulk absorption 
@@ -230,7 +322,7 @@ float Analyzer::ComputeLambda(const float& r, const float& theta, const unsigned
   float cosAngleSiPMToXYandSiPM(1);
   if (sipmToXY != 0) cosAngleSiPMToXYandSiPM = (-r*r + sipmToXYSquared + m_diskRadius*m_diskRadius)/(2*sipmToXY*m_diskRadius);
  
-  float relativeWeight = N0*cosAngleSiPMToXYandSiPM*TMath::Exp(-sipmToXY/m_attenuationLength)/sipmToXY;
+  float relativeWeight = N0*cosAngleSiPMToXYandSiPM*TMath::Exp(-sipmToXY/attenuationLength)/sipmToXY;
   //std::cout << "Weight = " << relativeWeight << "  at sipm " << sipm << " from x = " << x << " y = " << y << "  sipmToXY = " << sipmToXY << " angleXYandSIPM = " << angleXYandSiPMRad*180/TMath::Pi() << " beta = " << m_beta << "  thetaDeg = " << thetaDeg <<std::endl;
   if (relativeWeight < 0) { std::cout << "UH OH! WEIGHT < 0!!\n"; std::exit(1); }
   return relativeWeight;
