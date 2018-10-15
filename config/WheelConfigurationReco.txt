@@ -22,4 +22,4 @@ radiusBinSize=0.5
 attenuationLengthBinSize=2.0
 diskRadius=5.7
 attenuationLength=30
-nVoxels=64
+nVoxels=2500

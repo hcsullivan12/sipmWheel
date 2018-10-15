@@ -182,12 +182,12 @@ void Reco(const wheel::Configuration& myConfig)
     // Option to output a few waveforms
     if (trigger == 1) SaveWaveforms(fr, myConfig);
   
-    //wheel::Analyzer analyzer;
-    //analyzer.RunReco(sipmToTriggerMap, sipmInfoMap, myConfig, trigger);
-    wheel::Reconstructor reconstructor;
-    reconstructor.Reconstruct(sipmToTriggerMap, sipmInfoMap, myConfig, trigger);
+    wheel::Analyzer analyzer;
+    analyzer.RunReco(sipmToTriggerMap, sipmInfoMap, myConfig, trigger);
+    //wheel::Reconstructor reconstructor;
+    //reconstructor.Reconstruct(sipmToTriggerMap, sipmInfoMap, myConfig, trigger);
     // Now make the plots
-    //MakeRecoPlots(analyzer, myConfig, trigger);
+    MakeRecoPlots(analyzer, myConfig, trigger);
   }
 }
 

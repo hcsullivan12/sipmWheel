@@ -167,10 +167,10 @@ float Reconstructor::ComputeWeight(const unsigned& sipm, const float& x, const f
   float cosAngleSiPMToXYandSiPM(1);
   if (sipmToXY != 0) cosAngleSiPMToXYandSiPM = (-r*r + sipmToXYSquared + m_diskRadius*m_diskRadius)/(2*sipmToXY*m_diskRadius);
  
-  float relativeWeight = 1*cosAngleSiPMToXYandSiPM*TMath::Exp(-sipmToXY/m_attenuationLength)/sipmToXY;
+  float relativeWeight = /*1*cosAngleSiPMToXYandSiPM**/TMath::Exp(-sipmToXY/m_attenuationLength);///sipmToXY;
   //std::cout << "Weight = " << relativeWeight << "  at sipm " << sipm << " from x = " << x << " y = " << y << "  sipmToXY = " << sipmToXY << " angleXYandSIPM = " << angleXYandSiPMRad*180/TMath::Pi() << " beta = " << m_beta << "  thetaDeg = " << thetaDeg <<std::endl;
   if (relativeWeight < 0) { std::cout << "UH OH! WEIGHT < 0!!\n"; std::exit(1); }
-  return relativeWeight/integralNorm;
+  return relativeWeight/m_attenuationLength;//integralNorm;
 }
 
 void Reconstructor::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const unsigned& trigger)
@@ -189,7 +189,7 @@ void Reconstructor::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMIn
   
   // We have our first estimate, now let's make our next estimate
   unsigned iterator(1);
-  MakeNextEstimate(iterator); 
+  //MakeNextEstimate(iterator); 
 
   clock_t stop = clock();
   double runtime = ((double) (stop - start)) / CLOCKS_PER_SEC;
@@ -215,7 +215,7 @@ void Reconstructor::FirstEstimate(const std::pair<unsigned, unsigned>& maxSiPM_c
   // The amplitude at the mean will be the maxSiPM_counts.second + 1
   std::string gaus2D = "[0]*TMath::Exp( -((x-[1])*(x-[1]) + (y-[2])*(y-[2]))/(2*[3]*[3]) )";
   TF2 intensityDist("intensityDist", gaus2D.c_str(), -m_diskRadius, m_diskRadius, -m_diskRadius, m_diskRadius);
-  intensityDist.SetParameters(maxSiPM_counts.second+1, xGuess, yGuess, m_diskRadius/4);
+  intensityDist.SetParameters(maxSiPM_counts.second+1, xGuess, yGuess, m_diskRadius/10);
 
   // Now update our voxels
   for (auto& voxel : m_voxelList)
@@ -241,12 +241,13 @@ void Reconstructor::MakeNextEstimate(unsigned& iterator)
 
   // Helpful parameters
   std::vector<float> numDenom(m_nSiPMs, 0);
+  std::vector<float> numsTemp(m_nSiPMs, 0);
 
   // Compute sum in numerator's denominator
   for (const auto& voxel : m_voxelList) 
   {
-    const auto probMap = voxel.ProbabilityMap();
-    for (unsigned sipm = 1; sipm <= m_nSiPMs; sipm++) numDenom[sipm-1] += probMap.find(sipm)->second*voxel.OldIntensity(); 
+		const auto probMap = voxel.ProbabilityMap();
+		for (unsigned sipm = 1; sipm <= m_nSiPMs; sipm++) numDenom[sipm-1] += probMap.find(sipm)->second*voxel.OldIntensity(); 
   }
   // Now we can loop over each voxel
   for (auto& voxel : m_voxelList)
@@ -259,12 +260,14 @@ void Reconstructor::MakeNextEstimate(unsigned& iterator)
       std::cout << "X = " << voxel.X() << "  Y = " << voxel.Y() << " sipm = " << sipm << "  prob = " << probMap.find(sipm)->second << "  numDenom = " << numDenom[sipm-1] << std::endl;
       num += probMap.find(sipm)->second*m_data[sipm-1]/numDenom[sipm-1];
     }
-    std::cout << "Num before = " << num << std::endl;
+    //std::cout << "Num before = " << num << std::endl;
+    //std::cout << "X = " << voxel.X() << "  Y = " << voxel.Y() << " Num = " << num << "  old = " << voxel.OldIntensity() << std::endl;
     num = num*voxel.OldIntensity();
     // Denominator
-    for (const auto& sipmWeight : probMap) denom += sipmWeight.second;
+    //for (const auto& sipmWeight : probMap) denom += sipmWeight.second;
     
-    float newEstimate = num/denom;
+    //float newEstimate = num/denom;
+    float newEstimate = num;
     //std::cout << "X = " << voxel.X() << "  Y = " << voxel.Y() << " Num = " << num << "  denom = " << denom << "  num/denom = " << num/denom << std::endl;
     voxel.SetNewIntensity(newEstimate);
   }
@@ -275,7 +278,7 @@ void Reconstructor::MakeNextEstimate(unsigned& iterator)
 
   // If we're not happy with this, re-estimate
   std::cout << "Epsilon = " << eps << std::endl;
-  if (iterator < 3/*m_epsilonConvergence*/) 
+  if (iterator < 30/*m_epsilonConvergence*/) 
   { 
     iterator++;
     // Update our estimates 
