@@ -63,6 +63,7 @@ private:
   float ComputeWeight(const unsigned& sipm, const float& x, const float& y);
   void CheckConvergence(float& eps);
   void MakeNextEstimate(unsigned& iterator);
+  void SaveResults();
 
 
     
@@ -72,6 +73,7 @@ private:
   float                     m_diskRadius;        ///< Disk radius
   unsigned                  m_nSiPMs;            ///< Number of sipms around the disk
   unsigned                  m_nVoxels;           ///< Granularity of source position
+  std::string               m_recoOutputFile;    ///< Output path for results
   std::map<unsigned, float> m_data;              ///< Number of photons detected by each sipm 
 };
 }

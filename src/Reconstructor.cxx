@@ -12,6 +12,8 @@
 #include "Reconstructor.h"
 #include "TMath.h"
 #include "TF2.h"
+#include "TH2F.h"
+#include "TFile.h"
 
 namespace wheel {
 
@@ -36,6 +38,8 @@ void Reconstructor::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMIn
   // Start reconstruction 
   std::cout << "Starting reconstruction...\n";
   Reconstruct(sipmToTriggerMap, sipmInfoMap, trigger);
+  // Save the results
+  SaveResults();
 }
 
 void Reconstructor::Initialize(const Configuration& config)
@@ -46,6 +50,7 @@ void Reconstructor::Initialize(const Configuration& config)
   m_diskRadius        = config.diskRadius;
   m_nVoxels           = config.nVoxels;
   m_attenuationLength = config.attenuationLength;
+  m_recoOutputFile    = config.recoOutputFile;
   // Clear the data container
   m_data.clear();
   // Fill the voxel map
@@ -61,10 +66,13 @@ void Reconstructor::InitVoxelList()
   // Positions of voxels will be their centers.
   const unsigned firstQuadWidth = std::sqrt(m_nVoxels)/2;
   const float    increment      = 2*m_diskRadius/std::sqrt(m_nVoxels);
-  float x(increment/2), y(increment/2);
+  // We will work our way out from the origin
+  float x(increment/2);
 
   for (unsigned voxelCounterX = 1; voxelCounterX <= firstQuadWidth; voxelCounterX++)
   {
+    // Reset the y position
+    float y(increment/2);
     for (unsigned voxelCounterY = 1; voxelCounterY <= firstQuadWidth; voxelCounterY++)
     {
       Voxel v1( x,  y); Voxel v2(-x,  y);
@@ -74,8 +82,8 @@ void Reconstructor::InitVoxelList()
       float dist = std::sqrt(x*x + y*y);
       if (dist >= m_diskRadius) continue;
 
-      m_voxelList.emplace_back(v1); m_voxelList.emplace_back(v1);
-      m_voxelList.emplace_back(v1); m_voxelList.emplace_back(v1);
+      m_voxelList.emplace_back(v1); m_voxelList.emplace_back(v2);
+      m_voxelList.emplace_back(v3); m_voxelList.emplace_back(v4);
 
       y += increment;
     }
@@ -84,7 +92,8 @@ void Reconstructor::InitVoxelList()
   
   // Now we need to store the weights
   // First compute relative weights, then normalize to the whole disk
-  std::vector<float> sums(m_nSiPMs, 0);
+  std::vector<float> sums(m_voxelList.size(), 0);
+  unsigned voxelCounter(0);
   for (auto& voxel : m_voxelList)
   {
     // Probability map for this voxel
@@ -92,20 +101,23 @@ void Reconstructor::InitVoxelList()
     for (unsigned sipm = 1; sipm <= m_nSiPMs; sipm++)
     {
 	    float weight = ComputeWeight(sipm, voxel.X(), voxel.Y());
-	    sums[sipm-1] += weight;
+	    sums[voxelCounter] += weight;
       probabilityMap.emplace(sipm, weight);
     }
     voxel.SetProbabilityMap(probabilityMap);
+    voxelCounter++;
   }
+  voxelCounter = 0;
   for (auto& voxel : m_voxelList)
   {
     // Probability map for this voxel
     auto probabilityMap = voxel.ProbabilityMap();
     for (unsigned sipm = 1; sipm <= m_nSiPMs; sipm++)
     {
-      probabilityMap.find(sipm)->second = probabilityMap.find(sipm)->second/sums[sipm-1];
+      probabilityMap.find(sipm)->second = probabilityMap.find(sipm)->second/sums[voxelCounter];
     }
     voxel.SetProbabilityMap(probabilityMap);
+    voxelCounter++;
   }
 }
 
@@ -125,7 +137,14 @@ float Reconstructor::ComputeWeight(const unsigned& sipm, const float& x, const f
   
   // Compute angle between sipm normal and v = (x,y), and distance from (x,y) to sipm
   float r                 = std::sqrt(x*x + y*y);
-  float thetaDeg          = TMath::ASin(y/r)*180/TMath::Pi();
+  float thetaDeg          = std::abs(TMath::ASin(y/r))*180/TMath::Pi();
+  // Handle theta convention
+  // 2nd quadrant
+  if (x < 0 && y > 0) thetaDeg += 90;
+  // 3rd quadrant
+  if (x < 0 && y < 0) thetaDeg += 180;
+  // 4th quadrant
+  if (x > 0 && y < 0) thetaDeg += 270;
   // Remember, we overlaid a square grid on our disk, so some of the voxels
   // we need to ignore
   if (r >= m_diskRadius) return 0; 
@@ -145,6 +164,7 @@ float Reconstructor::ComputeWeight(const unsigned& sipm, const float& x, const f
   if (sipmToXY != 0) cosAngleSiPMToXYandSiPM = (-r*r + sipmToXYSquared + m_diskRadius*m_diskRadius)/(2*sipmToXY*m_diskRadius);
  
   float relativeWeight = 1*cosAngleSiPMToXYandSiPM*TMath::Exp(-sipmToXY/m_attenuationLength)/sipmToXY;
+  //std::cout << "Weight = " << relativeWeight << "  at sipm " << sipm << " from x = " << x << " y = " << y << "  sipmToXY = " << sipmToXY << " angleXYandSIPM = " << angleXYandSiPMRad*180/TMath::Pi() << " beta = " << m_beta << "  thetaDeg = " << thetaDeg <<std::endl;
   if (relativeWeight < 0) { std::cout << "UH OH! WEIGHT < 0!!\n"; std::exit(1); }
   return relativeWeight;
 }
@@ -165,7 +185,7 @@ void Reconstructor::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMIn
   
   // We have our first estimate, now let's make our next estimate
   unsigned iterator(1);
-  MakeNextEstimate(iterator); 
+  //MakeNextEstimate(iterator); 
 }
 
 void Reconstructor::FirstEstimate(const std::pair<unsigned, unsigned>& maxSiPM_counts)
@@ -212,18 +232,18 @@ void Reconstructor::MakeNextEstimate(unsigned& iterator)
   std::cout << "Iteration = " << iterator << std::endl;
 
   // Helpful parameters
-  float num(0), denom(0);
   std::vector<float> numDenom(m_nSiPMs, 0);
 
   // Compute sum in numerator's denominator
   for (const auto& voxel : m_voxelList) 
   {
     const auto probMap = voxel.ProbabilityMap();
-    for (unsigned sipm = 1; sipm <= m_nSiPMs; sipm++) numDenom[sipm] += probMap.find(sipm)->second*voxel.OldIntensity(); 
+    for (unsigned sipm = 1; sipm <= m_nSiPMs; sipm++) numDenom[sipm-1] += probMap.find(sipm)->second*voxel.OldIntensity(); 
   }
   // Now we can loop over each voxel
   for (auto& voxel : m_voxelList)
   {
+    float num(0), denom(0);
     // Numerator
     const auto probMap = voxel.ProbabilityMap();
     for (unsigned sipm = 1; sipm <= m_nSiPMs; sipm++)
@@ -234,7 +254,7 @@ void Reconstructor::MakeNextEstimate(unsigned& iterator)
     for (const auto& sipmWeight : probMap) denom += sipmWeight.second;
     
     float newEstimate = num/denom;
-    std::cout << "Num = " << num << "  denom = " << denom << std::endl;
+    //std::cout << "Num = " << num << "  denom = " << denom << std::endl;
     voxel.SetNewIntensity(newEstimate);
   }
 
@@ -244,7 +264,17 @@ void Reconstructor::MakeNextEstimate(unsigned& iterator)
 
   // If we're not happy with this, re-estimate
   std::cout << "Epsilon = " << eps << std::endl;
-  //if (diff > m_epsilonConvergence) { iterator++; MakeNextEstimate(iterator); }
+  if (iterator < 20/*m_epsilonConvergence*/) 
+  { 
+    iterator++;
+    // Update our estimates 
+    for (auto& voxel : m_voxelList)
+    {
+      //std::cout << "X = " << voxel.X() << "  Y = " << voxel.Y() << "  Old = " << voxel.OldIntensity() << "  New = " << voxel.NewIntensity() << std::endl;
+      voxel.SetOldIntensity(voxel.NewIntensity());
+    }
+    MakeNextEstimate(iterator); 
+  }
 }
 
 void Reconstructor::CheckConvergence(float& eps)
@@ -257,11 +287,30 @@ void Reconstructor::CheckConvergence(float& eps)
   {
     counter++;
     sum += (voxel.OldIntensity() - voxel.NewIntensity())*(voxel.OldIntensity() - voxel.NewIntensity());
-    std::cout << "old = " << voxel.OldIntensity() << "  new = " << voxel.NewIntensity() << std::endl;
+    //std::cout << "old = " << voxel.OldIntensity() << "  new = " << voxel.NewIntensity() << std::endl;
   }
   // Our metric is the average difference
   std::cout << sum << "  " << counter << std::endl;
   eps = sum/counter;
+}
+
+void Reconstructor::SaveResults()
+{
+  // Need to think about plots here
+
+  // First plot: 2D histograms showing intensities 
+  unsigned nBins(std::sqrt(m_nVoxels));
+  TH2F intensities("intensities", "intensities", nBins, -m_diskRadius, m_diskRadius, nBins, -m_diskRadius, m_diskRadius);
+  for (const auto& voxel : m_voxelList)
+  {
+    auto xBin = intensities.GetXaxis()->FindBin(voxel.X()); 
+    auto yBin = intensities.GetYaxis()->FindBin(voxel.Y());
+    intensities.SetBinContent(xBin, yBin, voxel.OldIntensity());
+  }
+
+  TFile outputFile(m_recoOutputFile.c_str(), "UPDATE");
+  intensities.Write();
+  outputFile.Close();
 }
 
 std::pair<unsigned, unsigned> Reconstructor::InitData(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const unsigned& trigger)
@@ -289,6 +338,7 @@ std::pair<unsigned, unsigned> Reconstructor::InitData(SiPMToTriggerMap& sipmToTr
 
     // Store counts in data container
     m_data.emplace(sipm.first, sipmCounts);
+    std::cout << "SiPM " << sipm.first << " --> " << sipmCounts << " p.e.\n";
   }
 
   return std::make_pair(maxSiPM, max);
