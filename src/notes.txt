@@ -1,0 +1,25 @@
+// Needed parameters...
+  /*// First derivative
+  float drdx    = x/r; 
+  float drdy    = y/r;
+  // Assuming y,x > 0
+  float dpdx    = y/xsec2theta; 
+  float dpdy    = -1/x;
+  float drbardx = 2*r*drdx - 2*m_diskRadius*cosp*drdx + 2*r*m_diskRadius*sinp*dpdx;
+  float drbardy = 2*r*drdy - 2*m_diskRadius*cosp*drdy + 2*r*m_diskRadius*sinp*dpdy;
+  float dcospdx = (1/(rbar*m_diskRadius))*( rbar*drbardx - r*drdx - m_diskRadius*cosp*drbardx );
+  float dcospdx = (1/(rbar*m_diskRadius))*( rbar*drbardx - r*drdx - m_diskRadius*cosp*drbardx );
+  
+  float dlambdadx = (N0*TMath::Exp(-rbar/m_attenuationLength)/rBar)*( dcospdx - cosp(1/m_attenuationLength + 1/rBar)*drbardx );
+  float dlambdady = (N0*TMath::Exp(-rbar/m_attenuationLength)/rBar)*( dcospdy - cosp(1/m_attenuationLength + 1/rBar)*drbardy );
+  
+  // Second derivative
+  float d2rdx = (r - x*drdx)/r*r;
+  float d2rdy = (r - y*drdy)/r*r;
+  // Assuming y,x > 0
+  
+  float d2rBardx = 2*drdx*drdx + 2*r*d2rdx + 2*R*sinp*dpdx*drdx - 2*R*cosp*d2rdx + 2*drdx*R*sinp*dpdx + 2*r*R*cosp*dpdx*dpdx + 2*r*R*sinp*d2pdx;
+  float d2rBardy = 2*drdy*drdy + 2*r*d2rdy + 2*R*sinp*dpdy*drdy - 2*R*cosp*d2rdy + 2*drdy*R*sinp*dpdy + 2*r*R*cosp*dpdy*dpdy + 2*r*R*sinp*d2pdy;
+
+  float d2*/
+

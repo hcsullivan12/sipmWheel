@@ -31,7 +31,7 @@
 #include "FileReader.h"
 #include "Analyzer.h"
 #include "Characterizer.h"
-#include "Reconstructor.h"
+//#include "Reconstructor.h"
 
 // Prototypes
 void PrintTheFiles(const wheel::SiPMToFilesMap& sipmToFilesMap);
@@ -538,7 +538,7 @@ void MakeRecoPlots(wheel::Analyzer& analyzer, const wheel::Configuration& config
   for (int m = 1; m <= config.nSiPMs; m++) 
   {
     float lambda_m = analyzer.ComputeLambda( mleParameters[0].second.find("radius")->second, mleParameters[0].second.find("theta")->second, 
-                                             mleParameters[0].first, m); // mleParameters[0].second.find("attenuationLength")->second);
+                                             mleParameters[0].first, m); 
     prediction[m - 1] = static_cast<unsigned>(lambda_m);
   }
 
