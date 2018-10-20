@@ -90,6 +90,7 @@ struct Configuration
   float                     diskRadius;                ///< Disk radius for reconstruction (in cm)
   float                     attenuationLength;         ///< Attenuation length for disk (in cm)
   unsigned                  nVoxels;                   ///< Number of voxels to segment the disk geometry (=NxN)
+  unsigned                  maxIterations;
 };
 }
 

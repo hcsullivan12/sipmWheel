@@ -18,5 +18,6 @@ biases=73.7
 gains=0.005,0.005,0.005,0.005
 breakdowns=71,71,71,71
 diskRadius=5.7
+maxIterations=20
 attenuationLength=30
-nVoxels=360000
+nVoxels=4900

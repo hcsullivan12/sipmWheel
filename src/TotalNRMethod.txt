@@ -16,6 +16,9 @@
 #include "TStyle.h"
 #include "TGraph.h"
 #include "TLegend.h"
+#include "TMatrixD.h"
+#include "TArrayD.h"
+#include "TDecompLU.h"
 
 namespace wheel {
 
@@ -46,10 +49,14 @@ void Analyzer::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap
 void Analyzer::Initialize(const Configuration& config)
 {
   // Initialize
+  m_maxIterations     = config.maxIterations;
+  if (m_maxIterations == 0) { std::cout << "Error. Please specify maximum number of iterations!\n"; std::exit(1); }
   m_nVoxels           = config.nVoxels;  
   m_diskRadius        = config.diskRadius;
+  if (m_diskRadius == 0) { std::cout << "Error. Please specify disk radius!\n"; std::exit(1); }
   m_attenuationLength = config.attenuationLength;
   if (m_attenuationLength == 0) { std::cout << "Error. Please specify an attenuation length!\n"; std::exit(1); }
+  if (config.nSiPMs == 0) { std::cout << "Error. Please specify number of SiPMs!\n"; std::exit(1); }
   m_beta              = 360/config.nSiPMs;
   m_nSiPMs            = config.nSiPMs;
   m_mlLogLikelihood   = std::numeric_limits<double>::lowest();
@@ -105,16 +112,16 @@ void Analyzer::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap
   // First to cound number of photons in each hit
   // also N0 set to lower threshold to decrease computation time
   const auto maxSiPM_counts = InitData(sipmToTriggerMap, sipmInfoMap, trigger);
-  unsigned N0 = maxSiPM_counts.second;
+  float N0 = maxSiPM_counts.second;
+
+  // Make our initial estimate
+  FirstEstimate(maxSiPM_counts);
 
   std::cout << "Running MLE...\n";
   // Start main loop
-  // We will cover the entire parameter space, with the cost of computation time
-  while ( N0 <= 300 ) 
-  {
-    Handle(N0);
-    N0++;
-  }
+  // Make next estimate!
+  unsigned iterator(0);
+  MakeNextEstimate(iterator);
  
   // We should have the ml now
   std::cout << "Max log likelihood = " << m_mlLogLikelihood << std::endl
@@ -132,21 +139,140 @@ void Analyzer::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap
   std::cout << "Run time of " << duration << " s" << std::endl;
 }
 
-void Analyzer::Handle(const unsigned& N0)
+void Analyzer::FirstEstimate(const std::pair<unsigned, unsigned>& maxSiPM_counts)
 {
-  for (const auto& voxel : m_voxelList)
-  {
-    // Log likelihood for this parameter set
-    double logLikelihood = ComputeLogLikelihood(voxel.X(), voxel.Y(), N0);
-    if (logLikelihood > m_mlLogLikelihood) { m_mlLogLikelihood = logLikelihood; m_mlN0 = N0; m_mlX = voxel.X(); m_mlY = voxel.Y(); m_mlRadius = voxel.R(); m_mlTheta = voxel.Theta(); } 
-  }
+  // We will make our first guesses:
+  //
+  //  R:     diskRadius/2
+  //  Theta: (maxSiPM-1)*beta  ///< This is just the angular position of maxSiPM
+  //  N0:    maxSiPM_counts + 1
+  // 
+  float rGuess        = m_diskRadius/2;
+  float thetaGuessDeg = m_beta*(maxSiPM_counts.first-1); 
+  // What the x and y coordinates?
+  m_oldGuessX     = rGuess*TMath::Cos(thetaGuessDeg*TMath::Pi()/180);
+  m_oldGuessY     = rGuess*TMath::Sin(thetaGuessDeg*TMath::Pi()/180); 
+  m_oldGuessN0    = maxSiPM_counts.second + 1;
+  m_oldGuessMLogL = ComputeLogLikelihood(m_oldGuessX, m_oldGuessY, m_oldGuessN0);
+
+  std::cout << "First Guess!!...\n";
+  std::cout << "X = " << m_oldGuessX << "  Y = " << m_oldGuessY << "  N0 = " << m_oldGuessN0 << "  logL = " << m_oldGuessMLogL << std::endl;
 }
 
-double Analyzer::ComputeLogLikelihood(const float& x, const float& y, const unsigned& N0)
+void Analyzer::MakeNextEstimate(unsigned& iterator)
+{
+  // Make sure we haven't done this too many times
+  iterator++;
+  std::cout << "Iteration " << iterator << std::endl;
+  if (iterator > m_maxIterations) return;
+
+  // We will apply the Newton-Raphson method to
+  // maximize our likelihood!
+  //
+  // We will use:
+  //
+  // V_n+1 = V_n - [l''(V_n)]^-1 * l'(V_n)
+  //
+  
+  // We first need to calculate our derivatives
+  // As h --> 0...
+  const float h   = 0.1;
+  
+  // dl/dx
+  double l1   = ComputeLogLikelihood(m_oldGuessX+h, m_oldGuessY, m_oldGuessN0); 
+  double dldx = (l1 - m_oldGuessMLogL)/h;  
+
+  // dl/dy
+  double l2 = ComputeLogLikelihood(m_oldGuessX, m_oldGuessY+h, m_oldGuessN0); 
+  double dldy = (l2 - m_oldGuessMLogL)/h;
+
+  // dl/dN0
+  double l3 = ComputeLogLikelihood(m_oldGuessX, m_oldGuessY, m_oldGuessN0+h); 
+  double dldN0 = (l3 - m_oldGuessMLogL)/h;  
+
+  // d2l/dx2
+  double l4 = ComputeLogLikelihood(m_oldGuessX-h, m_oldGuessY, m_oldGuessN0);
+  double l5 = ComputeLogLikelihood(m_oldGuessX+h, m_oldGuessY, m_oldGuessN0); 
+  double d2ldx2 = (l4 - 2*m_oldGuessMLogL + l5)/(h*h); 
+
+  // d2l/dy2
+  double l6 = ComputeLogLikelihood(m_oldGuessX, m_oldGuessY-h, m_oldGuessN0);
+  double l7 = ComputeLogLikelihood(m_oldGuessX, m_oldGuessY+h, m_oldGuessN0); 
+  double d2ldy2 = (l6 - 2*m_oldGuessMLogL + l7)/(h*h); 
+
+  // d2l/dN02
+  double l8 = ComputeLogLikelihood(m_oldGuessX, m_oldGuessY, m_oldGuessN0-h);
+  double l9 = ComputeLogLikelihood(m_oldGuessX, m_oldGuessY, m_oldGuessN0+h); 
+  double d2ldN02 = (l8 - 2*m_oldGuessMLogL + l9)/(h*h); 
+
+  // d2l/dxdy
+  double l10 = ComputeLogLikelihood(m_oldGuessX+h, m_oldGuessY+h, m_oldGuessN0);
+  double l11 = ComputeLogLikelihood(m_oldGuessX+h, m_oldGuessY-h, m_oldGuessN0); 
+  double l12 = ComputeLogLikelihood(m_oldGuessX-h, m_oldGuessY+h, m_oldGuessN0);
+  double l13 = ComputeLogLikelihood(m_oldGuessX-h, m_oldGuessY-h, m_oldGuessN0); 
+  double d2ldxdy = (l10 - l11 - l12 + l13)/(h*h); 
+
+  // d2l/dxdN0
+  double l14 = ComputeLogLikelihood(m_oldGuessX+h, m_oldGuessY, m_oldGuessN0+h);
+  double l15 = ComputeLogLikelihood(m_oldGuessX+h, m_oldGuessY, m_oldGuessN0-h); 
+  double l16 = ComputeLogLikelihood(m_oldGuessX-h, m_oldGuessY, m_oldGuessN0+h);
+  double l17 = ComputeLogLikelihood(m_oldGuessX-h, m_oldGuessY, m_oldGuessN0-h); 
+  double d2ldxdN0 = (l14 - l15 - l16 + l17)/(h*h); 
+
+  // d2l/dydN0
+  double l18 = ComputeLogLikelihood(m_oldGuessX, m_oldGuessY+h, m_oldGuessN0+h);
+  double l19 = ComputeLogLikelihood(m_oldGuessX, m_oldGuessY-h, m_oldGuessN0+h); 
+  double l20 = ComputeLogLikelihood(m_oldGuessX, m_oldGuessY+h, m_oldGuessN0-h);
+  double l21 = ComputeLogLikelihood(m_oldGuessX, m_oldGuessY-h, m_oldGuessN0-h); 
+  double d2ldydN0 = (l18 - l19 - l20 + l21)/(h*h); 
+
+  // Now we can form our Fisher matrix
+  TArrayD data1(3);
+  data1[0] = dldx, data1[1] = dldy, data1[2] = dldN0; 
+
+  TArrayD data2(9); 
+  data2[0] = d2ldx2;   data2[1] = d2ldxdy;  data2[2] = d2ldxdN0;
+  data2[3] = d2ldxdy;  data2[4] = d2ldy2;   data2[5] = d2ldydN0;
+  data2[6] = d2ldxdN0; data2[7] = d2ldydN0; data2[8] = d2ldN02;
+
+  TMatrixD lPVector(3,1);
+  lPVector.SetMatrixArray(data1.GetArray());
+  TMatrixD fisherMatrix(3,3);
+  fisherMatrix.SetMatrixArray(data2.GetArray()); 
+
+  // Try to invert the matrix
+  TDecompLU lu(fisherMatrix);
+  TMatrixD inverseFisherMatrix = fisherMatrix;
+  if (!lu.Decompose()) { std::cout << "Decomposition failed, matrix singular!!" << std::endl; return; }
+  else lu.Invert(inverseFisherMatrix);
+  
+  // Multiply Fisher and vector
+  auto m = inverseFisherMatrix*lPVector;
+
+  std::cout << m[0][0] << " " << m[1][0] << " " << m[2][0] << std::endl;
+
+  // Our convention --> x, y, N0
+  m_newGuessX     = m_oldGuessX  - m[0][0];
+  m_newGuessY     = m_oldGuessY  - m[1][0];
+  m_newGuessN0    = m_oldGuessN0 - m[2][0]; 
+  m_newGuessMLogL = ComputeLogLikelihood(m_newGuessX, m_newGuessY, m_newGuessN0);
+  std::cout << "X' = " << m_newGuessX << "  Y' = " << m_newGuessY << "  N0' = " << m_newGuessN0 << "  logL' = " << m_newGuessMLogL << "\n" << std::endl;
+  // See if we've found our maximum
+  if (m_newGuessMLogL < m_oldGuessMLogL) return;
+
+  // Otherwise, keep searching
+  m_oldGuessX     = m_newGuessX;
+  m_oldGuessY     = m_newGuessY;
+  m_oldGuessN0    = m_newGuessN0;
+  m_oldGuessMLogL = m_newGuessMLogL;
+
+  MakeNextEstimate(iterator);
+}
+
+double Analyzer::ComputeLogLikelihood(const float& x, const float& y, const float& N0)
 {
   // Convert x and y to polar coordinates 
-  float r        = 0;
-  float thetaDeg = 0;
+  float r(0), thetaDeg (0);
   ConvertToPolar(r, thetaDeg, x, y);  
 
   // Sum over terms ----> k_m*ln(lambda_m) - lambda_m - ln(k_m!)
@@ -166,15 +292,19 @@ void Analyzer::ConvertToPolar(float& r, float& thetaDeg, const float& x, const f
 {
   r        = std::sqrt(x*x + y*y);
   thetaDeg = TMath::ASin(std::abs(y/r))*180/TMath::Pi();
-
+ 
   // Handle theta convention
-  if (x < 0 && y > 0) thetaDeg += 90;
-  if (x < 0 && y < 0) thetaDeg += 180;
-  if (x > 0 && y < 0) thetaDeg += 270;
+  if (x < 0 && y > 0) thetaDeg = 180 - thetaDeg;
+  if (x < 0 && y < 0) thetaDeg = 180 + thetaDeg;
+  if (x > 0 && y < 0) thetaDeg = 360 - thetaDeg;
+
+ // std::cout << "CTP " << r << " " << thetaDeg << " " << x << " " << y << std::endl;
+
 }
 
-float Analyzer::ComputeLambda(const float& r, const float& thetaDeg, const unsigned& N0, const unsigned& sipm)
+float Analyzer::ComputeLambda(const float& r, const float& thetaDeg, const float& N0, const unsigned& sipm)
 {
+  //std::cout << "klsdf " << r << " " << thetaDeg << " " << N0 << std::endl;
   // Assumptions:
   //    1) Only bulk absorption 
   //    2) Detection effeciency of sipms is 100%

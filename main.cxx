@@ -108,6 +108,7 @@ void OutputConfigInfo(wheel::Configuration& config)
             << "RadiusBinSize       " << config.radiusBinSize                  << std::endl
             << "AttenLengthBinSize  " << config.attenuationLengthBinSize       << std::endl
             << "nVoxels             " << config.nVoxels                        << std::endl
+            << "maxIterations       " << config.maxIterations                  << std::endl
             << "AttenuationLength   " << config.attenuationLength              << std::endl
             << "DiskRadius          " << config.diskRadius                     << std::endl;
   std::cout << std::setfill('-') << std::setw(80) << "-" << std::setfill(' ') << std::endl;
@@ -283,6 +284,7 @@ void ReadConfigFile(wheel::Configuration& config)
     else if (header == "diskRadius")              config.diskRadius = std::stof(value);
     else if (header == "attenuationLength")       config.attenuationLength = std::stof(value); 
     else if (header == "nVoxels")                 config.nVoxels    = std::stoi(value);
+    else if (header == "maxIterations")           config.maxIterations = std::stoi(value);
     else    { std::cout << "Cannot identify " << header << std::endl; exit(1); }
   }
   

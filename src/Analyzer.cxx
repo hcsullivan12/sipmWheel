@@ -16,6 +16,7 @@
 #include "TStyle.h"
 #include "TGraph.h"
 #include "TLegend.h"
+#include "TBackCompFitter.h"
 
 namespace wheel {
 
@@ -35,7 +36,7 @@ Analyzer::~Analyzer()
 void Analyzer::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const Configuration& config, const unsigned& trigger)
 {
   // Initialize voxels and containers
-  std::cout << "Initializing reconstruction...\n";  
+  std::cout << "\nInitializing reconstruction...\n";  
   Initialize(config);
   // Start reconstruction
   Reconstruct(sipmToTriggerMap, sipmInfoMap, trigger);
@@ -46,16 +47,21 @@ void Analyzer::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap
 void Analyzer::Initialize(const Configuration& config)
 {
   // Initialize
+  m_maxIterations     = config.maxIterations;
+  if (m_maxIterations == 0) { std::cout << "Error. Please specify maximum number of iterations!\n"; std::exit(1); }
   m_nVoxels           = config.nVoxels;  
   m_diskRadius        = config.diskRadius;
+  if (m_diskRadius == 0) { std::cout << "Error. Please specify disk radius!\n"; std::exit(1); }
   m_attenuationLength = config.attenuationLength;
   if (m_attenuationLength == 0) { std::cout << "Error. Please specify an attenuation length!\n"; std::exit(1); }
+  if (config.nSiPMs == 0) { std::cout << "Error. Please specify number of SiPMs!\n"; std::exit(1); }
   m_beta              = 360/config.nSiPMs;
   m_nSiPMs            = config.nSiPMs;
   m_mlLogLikelihood   = std::numeric_limits<double>::lowest();
   m_mlRadius = 0; m_mlTheta = 0; m_mlN0 = 0; 
   m_recoOutputFile    = config.recoOutputFile;
   m_data.clear();
+  m_doCI = false;
   // Create the voxels
   InitVoxelList();
 }
@@ -107,9 +113,10 @@ void Analyzer::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap
   const auto maxSiPM_counts = InitData(sipmToTriggerMap, sipmInfoMap, trigger);
   unsigned N0 = maxSiPM_counts.second;
 
-  std::cout << "Running MLE...\n";
+  std::cout << "\nRunning MLE...\n";
   // Start main loop
-  // We will cover the entire parameter space, with the cost of computation time
+  // We will cover the entire parameter space, at the expense of computation time
+  // Once N0 is calculated, we'll use Newton-Raphson to better approximate x and y
   while ( N0 <= 300 ) 
   {
     Handle(N0);
@@ -124,8 +131,19 @@ void Analyzer::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap
             << "Theta              = " << m_mlTheta         << " deg\n" 
             << "N0                 = " << m_mlN0            << " photons\n";
 
+  // Refine the estimation
+  unsigned iterator(0);
+  std::cout << "\nRefining estimate...\n";
+  RefineEstimate(iterator);
+
+  std::cout << "Max log likelihood = " << m_mlLogLikelihood << std::endl
+            << "X                  = " << m_mlX             << " cm\n"
+            << "Y                  = " << m_mlY             << " cm\n"
+            << "Radius             = " << m_mlRadius        << " cm\n"
+            << "Theta              = " << m_mlTheta         << " deg\n";
+
   // Estimate the confidence interval
-  ComputeConfidenceIntervals();
+  //ComputeConfidenceIntervals();
  
   clock_t end = clock();
   double duration = ((double) (end - start)) / CLOCKS_PER_SEC;
@@ -168,13 +186,13 @@ void Analyzer::ConvertToPolar(float& r, float& thetaDeg, const float& x, const f
   thetaDeg = TMath::ASin(std::abs(y/r))*180/TMath::Pi();
 
   // Handle theta convention
-  if (x < 0 && y > 0) thetaDeg += 90;
-  if (x < 0 && y < 0) thetaDeg += 180;
-  if (x > 0 && y < 0) thetaDeg += 270;
+  if (x < 0 && y > 0) thetaDeg = 180 - thetaDeg;
+  if (x < 0 && y < 0) thetaDeg = 180 + thetaDeg;
+  if (x > 0 && y < 0) thetaDeg = 360 - thetaDeg;
 }
 
 float Analyzer::ComputeLambda(const float& r, const float& thetaDeg, const unsigned& N0, const unsigned& sipm)
-{
+{ 
   // Assumptions:
   //    1) Only bulk absorption 
   //    2) Detection effeciency of sipms is 100%
@@ -208,6 +226,169 @@ float Analyzer::ComputeLambda(const float& r, const float& thetaDeg, const unsig
   return weight;
 }
 
+void Analyzer::RefineEstimate(unsigned& iterator)
+{
+  // Make sure we haven't done this too many times
+  iterator++;
+  if (iterator > m_maxIterations) 
+  {
+    std::cout << "NOTE: Was not able to refine estimate in " << m_maxIterations << " iterations!" << std::endl;
+    return;
+  }
+
+  // We will apply the Newton-Raphson method to
+  // refine our estimate! We will take N0 as that
+  // estimated from the "Handle" stage.
+  //
+  // We will use:
+  //
+  // V_n+1 = V_n - [l''(V_n)]^-1 * l'(V_n)
+  //
+
+  // We first need to calculate our derivatives
+  // As h --> 0...
+  const float h = 0.001;
+
+  // dl/dx
+  double l1   = ComputeLogLikelihood(m_mlX+h, m_mlY, m_mlN0);
+  double dldx = (l1 - m_mlLogLikelihood)/h;
+
+  // dl/dy
+  double l2 = ComputeLogLikelihood(m_mlX, m_mlY+h, m_mlN0);
+  double dldy = (l2 - m_mlLogLikelihood)/h;
+
+  // d2l/dx2
+  double l4 = ComputeLogLikelihood(m_mlX-h, m_mlY, m_mlN0);
+  double l5 = ComputeLogLikelihood(m_mlX+h, m_mlY, m_mlN0);
+  double d2ldx2 = (l4 - 2*m_mlLogLikelihood + l5)/(h*h);
+
+  // d2l/dy2
+  double l6 = ComputeLogLikelihood(m_mlX, m_mlY-h, m_mlN0);
+  double l7 = ComputeLogLikelihood(m_mlX, m_mlY+h, m_mlN0);
+  double d2ldy2 = (l6 - 2*m_mlLogLikelihood + l7)/(h*h);
+
+  // d2l/dxdy
+  double l10 = ComputeLogLikelihood(m_mlX+h, m_mlY+h, m_mlN0);
+  double l11 = ComputeLogLikelihood(m_mlX+h, m_mlY-h, m_mlN0);
+  double l12 = ComputeLogLikelihood(m_mlX-h, m_mlY+h, m_mlN0);
+  double l13 = ComputeLogLikelihood(m_mlX-h, m_mlY-h, m_mlN0);
+  double d2ldxdy = (l10 - l11 - l12 + l13)/(h*h);
+
+  //std::cout << "2nd Derivatives => " << d2ldx2 << " " << d2ldy2 << " " << d2ldxdy << "\n";
+
+  // Now we can form our Fisher matrix
+  TArrayD data1(2);
+  data1[0] = dldx; data1[1] = dldy;
+
+  TArrayD data2(4);
+  data2[0] = d2ldx2;
+  data2[1] = d2ldxdy;
+  data2[2] = d2ldxdy;
+  data2[3] = d2ldy2;
+
+  TMatrixD lPVector(2,1);
+  lPVector.SetMatrixArray(data1.GetArray());
+  TMatrixD fisherMatrix(2,2);
+  fisherMatrix.SetMatrixArray(data2.GetArray());
+
+  // Try to invert the matrix
+  TDecompLU lu(fisherMatrix);
+  TMatrixD inverseFisherMatrix = fisherMatrix;
+  if (!lu.Decompose()) 
+  {
+    std::cout << "Decomposition failed, matrix singular!!" << std::endl;
+    return;
+  }
+  else lu.Invert(inverseFisherMatrix);
+
+  // Multiply Fisher and vector
+  auto m = inverseFisherMatrix*lPVector;
+
+  // Our convention --> x, y
+  float newGuessX     = m_mlX  - m[0][0];
+  float newGuessY     = m_mlY  - m[1][0];
+  float newGuessR(0), newGuessT(0);
+  ConvertToPolar(newGuessR, newGuessT, newGuessX, newGuessY);
+  
+  // Make sure r is not > disk radius
+  if (newGuessR >= m_diskRadius) { std::cout << "Caution: Estimate went out of bounds!\n"; return; }
+  double newGuessMLogL = ComputeLogLikelihood(newGuessX, newGuessY, m_mlN0);
+
+  // Update
+  m_mlX             = newGuessX;
+  m_mlY             = newGuessY;
+  ConvertToPolar(m_mlRadius, m_mlTheta, m_mlX, m_mlY);
+  m_mlLogLikelihood = newGuessMLogL;
+ 
+  // We want the eigenvalues and eigenvectors
+  TVectorD eigenvalues(2);
+  TMatrixD eigenvectors = fisherMatrix.EigenVectors(eigenvalues);
+  // Clear old memory
+  m_fisherEigenvalues.clear();
+  m_fisherEigenvectors.clear();
+  // Store eigenvalues
+  m_fisherEigenvalues.push_back(eigenvalues[0]);
+  m_fisherEigenvalues.push_back(eigenvalues[1]);
+  // Store eigenvectors
+  std::vector<float> e1 = {eigenvectors[0][0], eigenvectors[0][1]};
+  std::vector<float> e2 = {eigenvectors[1][0], eigenvectors[1][1]};
+  m_fisherEigenvectors.push_back(e1);
+  m_fisherEigenvectors.push_back(e2);
+ 
+  // Check the eigenvalues 
+  if (eigenvalues[0] < 0 && eigenvalues[1] < 0) 
+  { 
+    m_doCI = true; 
+    // Store the diagonal sigmas
+    m_sigmaXDiag = 1.000/std::sqrt(-m_fisherEigenvalues[0]);
+    m_sigmaYDiag = 1.000/std::sqrt(-m_fisherEigenvalues[1]);
+
+    // We want to rotate back to our old coordinates now
+    // Our rotation matrix is formed by the eigenvectors
+    TArrayD rotData(4);
+    rotData[0] = e1[0];
+    rotData[1] = e2[0];
+    rotData[2] = e1[1];
+    rotData[3] = e2[1];
+    // Our diagonal matrix has 1/m_sigmaXDiag^2 and 1/m_sigmaYDiag^2
+    TArrayD diagData(4);
+    diagData[0] = 1/(m_sigmaXDiag*m_sigmaXDiag);
+    diagData[1] = 0;
+    diagData[2] = 0;
+    diagData[3] = 1/(m_sigmaYDiag*m_sigmaYDiag);
+
+    TMatrixD rotationMatrix(2,2);
+    rotationMatrix.SetMatrixArray(rotData.GetArray());
+    TMatrixD diagMatrix(2,2);
+    diagMatrix.SetMatrixArray(diagData.GetArray());
+
+    TDecompLU lu(rotationMatrix);
+    TMatrixD inverseRotationMatrix = rotationMatrix;
+    if (!lu.Decompose()) 
+    {
+      std::cout << "Decomposition failed, matrix singular!!" << std::endl;
+      return;
+    }
+    else lu.Invert(inverseRotationMatrix);
+
+    // Now we have the matrices we need
+    // Calculate:
+    //
+    // Sigma^-1 = R*Diag*R^-1
+    //
+   
+    TMatrixD sigmaInverseMatrix = rotationMatrix*diagMatrix*inverseRotationMatrix;
+    // Store these
+    m_sigmaInverse.clear();
+    m_sigmaInverse.push_back(sigmaInverseMatrix[0][0]);  m_sigmaInverse.push_back(sigmaInverseMatrix[0][1]);
+    m_sigmaInverse.push_back(sigmaInverseMatrix[1][0]);  m_sigmaInverse.push_back(sigmaInverseMatrix[1][1]);
+
+    return; 
+  }
+  // Otherwise, keep searching
+  RefineEstimate(iterator);
+}
+/*
 void Analyzer::ComputeConfidenceIntervals()
 {
   // Some notes:
@@ -216,250 +397,32 @@ void Analyzer::ComputeConfidenceIntervals()
   //
   // Here: c*1/sqrt(I) = m_delta.find(percent)->second
   //
-  // c = 2.576 --> 99%
-  // c = 2.326 --> 98%
-  // c = 1.96  --> 95%
-  // c = 1.645 --> 90%
-  //
   // We will appoximate derivatives using standard numerical techniques.
   // We will compute the single CI, diagonalize to compute the joint CI,
   // where:
   //
   // CI = m_mlEstimate +- c*1/sqrt(-l'')
   //
-  // Remember:
-  // 
-  // lambda ~ N0*cos(alpha)*Exp(-r/attenuationLength)/r
-  //
- 
-  // Limit as h --> 0
-  const double h = 0.01;
-  std::cout << m_diskRadius/std::sqrt(m_nVoxels) << std::endl;
-  
-  // d2l/dx2
-  double l1 = ComputeLogLikelihood(m_mlX-h, m_mlY, m_mlN0); 
-  double l2 = ComputeLogLikelihood(m_mlX,   m_mlY, m_mlN0); 
-  double l3 = ComputeLogLikelihood(m_mlX+h, m_mlY, m_mlN0); 
-  double d2ldx2 = (-l1 + 2*l2 - l3)/(h*h);
 
-  std::cout << l1 << " " << l2 << " " << l3 << " " << m_mlLogLikelihood << std::endl;
+  // We cannot form CI for events where the eigenvalues of Fisher are > 0!
+  if (m_fisherEigenvalues[0] > 0 || m_fisherEigenvalues[1] > 0) return;
 
-  // d2l/dy2
-  float l4 = ComputeLogLikelihood(m_mlX, m_mlY-h, m_mlN0); 
-  float l5 = ComputeLogLikelihood(m_mlX, m_mlY,   m_mlN0); 
-  float l6 = ComputeLogLikelihood(m_mlX, m_mlY+h, m_mlN0); 
-  float d2ldy2 = (-l4 + 2*l5 - l6)/(h*h);
-
-  // d2l/dxdy
-  float l7  = ComputeLogLikelihood(m_mlX+h, m_mlY+h, m_mlN0); 
-  float l8  = ComputeLogLikelihood(m_mlX+h, m_mlY-h, m_mlN0); 
-  float l9  = ComputeLogLikelihood(m_mlX-h, m_mlY+h, m_mlN0); 
-  float l10 = ComputeLogLikelihood(m_mlX-h, m_mlY-h, m_mlN0); 
-  float d2ldxdy = (l7 - l8 - l9 + l10)/(4*h*h);
-
-  std::cout << d2ldx2 << " " << d2ldy2 << " " << d2ldxdy << std::endl;
-
-  /*// Create our matrix
-  double data[4] = {d2ldx2, d2ldxdy, d2ldxdy, d2ldy2};
-  TMatrixD fisherMatrix(2,2);
-  fisherMatrix.SetMatrixArray(data.GetArray());
-
-  TVectorD sigmas         = fisherMatrix.GetEigenValues();
-  TMatrixD eigenVecMatrix = fisherMatrix.GetEigenVectors();*/
-
-  
- /* m_deltaX.emplace(95, 1.960/std::sqrt(sum[0]));
-  m_deltaX.emplace(90, 1.645/std::sqrt(sum[0]));
-  m_deltaX.emplace(68, 1.000/std::sqrt(sum[0]));
-
-  m_deltaY.emplace(95, 1.960/std::sqrt(sum[1]));
-  m_deltaY.emplace(90, 1.645/std::sqrt(sum[1])); 
-  m_deltaY.emplace(68, 1.000/std::sqrt(sum[1]));
+  // Store the sigmas
+  m_sigmaX = 1.000/std::sqrt(-m_fisherEigenvalues[0]);
+  m_sigmaY = 1.000/std::sqrt(-m_fisherEigenvalues[1]);
 
 
-  //std::cout << m_deltaX.find(99)->second << "  " << m_deltaY.find(99)->second << std::endl;
+  // Form the margins for each CL
+  m_deltaX.emplace(95, 1.960/std::sqrt(-m_fisherEigenvalues[0]));
+  m_deltaX.emplace(90, 1.645/std::sqrt(-m_fisherEigenvalues[0]));
+  m_deltaX.emplace(68, 1.000/std::sqrt(-m_fisherEigenvalues[0]));
 
-  std::map<float, std::pair<float,float>> xBand, yBand;
-  xBand.emplace( 95, std::make_pair(m_mlX-m_deltaX.find(95)->second, m_mlX+m_deltaX.find(95)->second) );  
-  xBand.emplace( 90, std::make_pair(m_mlX-m_deltaX.find(90)->second, m_mlX+m_deltaX.find(90)->second) );  
-  xBand.emplace( 68, std::make_pair(m_mlX-m_deltaX.find(68)->second, m_mlX+m_deltaX.find(68)->second) );   
+  m_deltaY.emplace(95, 1.960/std::sqrt(-m_fisherEigenvalues[1]));
+  m_deltaY.emplace(90, 1.645/std::sqrt(-m_fisherEigenvalues[1])); 
+  m_deltaY.emplace(68, 1.000/std::sqrt(-m_fisherEigenvalues[1]));
 
-  yBand.emplace( 95, std::make_pair(m_mlY-m_deltaY.find(95)->second, m_mlY+m_deltaY.find(95)->second) );  
-  yBand.emplace( 90, std::make_pair(m_mlY-m_deltaY.find(90)->second, m_mlY+m_deltaY.find(90)->second) );  
-  yBand.emplace( 68, std::make_pair(m_mlY-m_deltaY.find(68)->second, m_mlY+m_deltaY.find(68)->second) );   
+  std::cout << m_deltaX.find(90)->second << "  " << m_deltaY.find(90)->second << std::endl;
 
-  std::cout << "95% -->  (" << xBand.find(95)->second.first << ", " << xBand.find(95)->second.second << ")   (" << yBand.find(95)->second.first << "," << yBand.find(95)->second.second << ")\n";
-  std::cout << "90% -->  (" << xBand.find(90)->second.first << ", " << xBand.find(90)->second.second << ")   (" << yBand.find(90)->second.first << "," << yBand.find(90)->second.second << ")\n";
-  std::cout << "68% -->  (" << xBand.find(68)->second.first << ", " << xBand.find(68)->second.second << ")   (" << yBand.find(68)->second.first << "," << yBand.find(68)->second.second << ")\n"; 
-
-  // Now we need to label each voxel according to the confidence band
-  for (auto& voxel : m_voxelList)
-  {
-    // Do this for decreasing confidence
-    voxel.SetCB(0);
-    if (xBand.find(95)->second.first < voxel.X() && voxel.X() < xBand.find(95)->second.second && 
-        yBand.find(95)->second.first < voxel.Y() && voxel.Y() < yBand.find(95)->second.second) {voxel.SetCB(95);}
-    if (xBand.find(90)->second.first < voxel.X() && voxel.X() < xBand.find(90)->second.second &&
-        yBand.find(90)->second.first < voxel.Y() && voxel.Y() < yBand.find(90)->second.second) {voxel.SetCB(90);}
-    if (xBand.find(68)->second.first < voxel.X() && voxel.X() < xBand.find(68)->second.second && 
-        yBand.find(68)->second.first < voxel.Y() && voxel.Y() < yBand.find(68)->second.second) {voxel.SetCB(68);} 
-    //std::cout << voxel.CB() << std::endl;
-  }*/
-}
-
-
-/*void Analyzer::ComputeConfidenceIntervals()
-{
-  // Some notes:
-  //
-  // [x-, x+]  --> x +- c*1/sqrt(I)
-  //
-  // Here: c*1/sqrt(I) = m_delta.find(percent)->second
-  //
-  // c = 2.576 --> 99%
-  // c = 2.326 --> 98%
-  // c = 1.96  --> 95%
-  // c = 1.645 --> 90%
-  //
-  // Our equation is:
-  //
-  // I = sum_k [ (data[k]/lambda^2[k])(dlambda/dx)^2 - (1 - data[k]/lambda[k])(d^2lambda/dx2) ]
-  //
-  // Rememeber:
-  // 
-  // lambda ~ N0*cos(alpha)*Exp(-r/attenuationLength)/r
-  //
- 
-  std::vector<float> sum(2,0);
-  for (unsigned sipm = 1; sipm <= m_nSiPMs; sipm++)
-  {
-    // Define the 2D lambda function to evaluate 1st and 2nd derivatives
-    // We need two of these to evaluate partials
-    // Be careful here, variable is always x!
-    std::string r_x              = "std::sqrt(x*x + "+std::to_string(m_mlX*m_mlX)+")";
-    std::string thetaDeg_x       = "( TMath::ACos("+std::to_string(m_mlX)+"/"+r_x+")*180/TMath::Pi() )";
-    std::string cosp_x           = "TMath::Cos( (("+std::to_string(sipm)+"-1)*"+std::to_string(m_beta)+" - "+thetaDeg_x+")*TMath::Pi()/180 )";
-    std::string rBar_x           = "std::sqrt("+r_x+"*"+r_x+" + "+std::to_string(m_diskRadius)+"*"+std::to_string(m_diskRadius)+" - 2*"+r_x+"*"+std::to_string(m_diskRadius)+"*"+cosp_x+")";
-    std::string cosAlpha_x       = "(("+rBar_x+"*"+rBar_x+" + "+std::to_string(m_diskRadius)+"*"+std::to_string(m_diskRadius)+" - "+r_x+"*"+r_x+")/(2*"+rBar_x+"*"+std::to_string(m_diskRadius)+"))";
-    std::string lambdaXConstEquation = std::to_string(m_mlN0)+"*"+cosAlpha_x+"*TMath::Exp(-"+rBar_x+"/"+std::to_string(m_attenuationLength)+")/"+rBar_x; 
-
-    std::cout << "r_x        = " << r_x        << "\n"
-              << "thetaDeg_x = " << thetaDeg_x << "\n"
-              << "cosp_x     = " << cosp_x     << "\n"
-              << "rBar_x     = " << rBar_x     << "\n"
-              << "cosAlpha_x = " << cosAlpha_x << "\n"
-              << "lambdaXC   = " << lambdaXConstEquation << "\n\n";
-
-    TF1 lambdaXConst("lambdaXConst", lambdaXConstEquation.c_str(), -m_diskRadius, m_diskRadius);
-   
-    std::string r_y            = "std::sqrt(x*x + "+std::to_string(m_mlY*m_mlY)+")";
-    std::string thetaDeg_y     = "TMath::ACos(x/"+r_y+")*180/TMath::Pi()";
-    std::string cosp_y         = "TMath::Cos( (("+std::to_string(sipm)+"-1)*"+std::to_string(m_beta)+" - "+thetaDeg_y+")*TMath::Pi()/180 )";
-    std::string rBar_y         = "std::sqrt("+r_y+"*"+r_y+" + "+std::to_string(m_diskRadius)+"*"+std::to_string(m_diskRadius)+" - 2*"+r_y+"*"+std::to_string(m_diskRadius)+"*"+cosp_y+")";
-    std::string cosAlpha_y     = "(("+rBar_y+"*"+rBar_y+" + "+std::to_string(m_diskRadius)+"*"+std::to_string(m_diskRadius)+" - "+r_y+"*"+r_y+")/(2*"+rBar_y+"*"+std::to_string(m_diskRadius)+"))";
-    std::string lambdaYConstEquation = std::to_string(m_mlN0)+"*"+cosAlpha_y+"*TMath::Exp(-"+rBar_y+"/"+std::to_string(m_attenuationLength)+")/"+rBar_y; 
-
-    TF1 lambdaYConst("lambdaYConst", lambdaYConstEquation.c_str(), -m_diskRadius, m_diskRadius);
-
-    // Derivatives
-    float dlambdadx   = lambdaYConst.Derivative(m_mlX);
-    float d2lambdadx2 = lambdaYConst.Derivative2(m_mlX); 
-    float dlambdady   = lambdaXConst.Derivative(m_mlY);
-    float d2lambdady2 = lambdaXConst.Derivative2(m_mlY); 
-
-    
-
-
-    // We also need lambda in terms of x and y
-    std::string r              = "std::sqrt(x*x + y*y)";
-    std::string thetaDeg       = "TMath::ACos(x/"+r+")*180/TMath::Pi()";
-    std::string cosp           = "TMath::Cos( (("+std::to_string(sipm)+"-1)*"+std::to_string(m_beta)+" - "+thetaDeg+")*TMath::Pi()/180 )";
-    std::string rBar           = "std::sqrt("+r+"*"+r+" + "+std::to_string(m_diskRadius)+"*"+std::to_string(m_diskRadius)+" - 2*"+r+"*"+std::to_string(m_diskRadius)+"*"+cosp+")";
-    std::string cosAlpha       = "(("+rBar+"*"+rBar+" + "+std::to_string(m_diskRadius)+"*"+std::to_string(m_diskRadius)+" - "+r+"*"+r+")/(2*"+rBar+"*"+std::to_string(m_diskRadius)+"))";
-    std::string lambdaEquation = std::to_string(m_mlN0)+"*"+cosAlpha+"*TMath::Exp(-"+rBar+"/"+std::to_string(m_attenuationLength)+")/"+rBar; 
-
-    TF2 lambda2D("lambda2D", lambdaEquation.c_str(), -m_diskRadius, m_diskRadius, -m_diskRadius, m_diskRadius);
-
-    // Lambda evaluated at our ml estimate
-    float lambda = lambda2D.Eval(m_mlX, m_mlY); 
-  
-    // Finally...
-    //std::cout << "Sum[0] = " << sum[0] << "  Sum[1] = " << sum[1] << "  ratio = " << (m_data[sipm-1]/lambda) << std::endl;
-
-    sum[0] += (m_data[sipm-1]/(lambda*lambda))*(dlambdadx*dlambdadx) + d2lambdadx2*(1 - (m_data[sipm-1]/lambda));
-    sum[1] += (m_data[sipm-1]/(lambda*lambda))*(dlambdady*dlambdady) + d2lambdady2*(1 - (m_data[sipm-1]/lambda));
-  }
-
-    float h    = 0.0001;
-    std::pair<float, float> rT;
-    rT  = ConvertXYToRTheta(m_mlX+h, m_mlY+h);
-    float l1 = ComputeLogLikelihood(rT.first, rT.second, m_mlN0);
-    rT = ConvertXYToRTheta(m_mlX+h, m_mlY-h);
-    float l2 = ComputeLogLikelihood(rT.first, rT.second, m_mlN0);
-    rT  = ConvertXYToRTheta(m_mlX-h, m_mlY+h);
-		float l3 = ComputeLogLikelihood(rT.first, rT.second, m_mlN0);
-		rT = ConvertXYToRTheta(m_mlX-h, m_mlY-h);
-		float l4 = ComputeLogLikelihood(rT.first, rT.second, m_mlN0);
-    rT  = ConvertXYToRTheta(m_mlX-h, m_mlY);
-    float l1 = ComputeLogLikelihood(rT.first, rT.second, m_mlN0);
-    std::cout << m_mlRadius << " " << m_mlTheta << " " << rT.first << " " << rT.second << std::endl;
-    rT = ConvertXYToRTheta(m_mlX+h, m_mlY);
-    float l2 = ComputeLogLikelihood(rT.first, rT.second, m_mlN0);
-    float fD = (-l1 + 2*m_mlLogLikelihood - l2)/(h*h);
-
-    std::cout << l1 << " " << m_mlLogLikelihood << " " << l2 << std::endl;
- 
-    std::cout << "Root = " << sum[0] << "  approx = " << fD << std::endl;
-
-
-  //std::cout << "Sum[0] = " << sum[0] << "  Sum[1] = " << sum[1] << std::endl;
-  // The sums are our second derivatives evaluated at our ml estimate
-  // [x-, x+]  --> x +- c*1/sqrt(I)
-  //
-  // Here: c*1/sqrt(I) = m_delta.find(percent)->second
-  //
-  // c = 1.96  --> 95%
-  // c = 1.645 --> 90%
-  // c = 1.0   --> 68%
-  if (sum[0] <= 0 || sum[1] <= 0) return;
-
-  m_deltaX.emplace(95, 1.960/std::sqrt(sum[0]));
-  m_deltaX.emplace(90, 1.645/std::sqrt(sum[0]));
-  m_deltaX.emplace(68, 1.000/std::sqrt(sum[0]));
-
-  m_deltaY.emplace(95, 1.960/std::sqrt(sum[1]));
-  m_deltaY.emplace(90, 1.645/std::sqrt(sum[1])); 
-  m_deltaY.emplace(68, 1.000/std::sqrt(sum[1]));
-
-
-  //std::cout << m_deltaX.find(99)->second << "  " << m_deltaY.find(99)->second << std::endl;
-
-  std::map<float, std::pair<float,float>> xBand, yBand;
-  xBand.emplace( 95, std::make_pair(m_mlX-m_deltaX.find(95)->second, m_mlX+m_deltaX.find(95)->second) );  
-  xBand.emplace( 90, std::make_pair(m_mlX-m_deltaX.find(90)->second, m_mlX+m_deltaX.find(90)->second) );  
-  xBand.emplace( 68, std::make_pair(m_mlX-m_deltaX.find(68)->second, m_mlX+m_deltaX.find(68)->second) );   
-
-  yBand.emplace( 95, std::make_pair(m_mlY-m_deltaY.find(95)->second, m_mlY+m_deltaY.find(95)->second) );  
-  yBand.emplace( 90, std::make_pair(m_mlY-m_deltaY.find(90)->second, m_mlY+m_deltaY.find(90)->second) );  
-  yBand.emplace( 68, std::make_pair(m_mlY-m_deltaY.find(68)->second, m_mlY+m_deltaY.find(68)->second) );   
-
-  std::cout << "95% -->  (" << xBand.find(95)->second.first << ", " << xBand.find(95)->second.second << ")   (" << yBand.find(95)->second.first << "," << yBand.find(95)->second.second << ")\n";
-  std::cout << "90% -->  (" << xBand.find(90)->second.first << ", " << xBand.find(90)->second.second << ")   (" << yBand.find(90)->second.first << "," << yBand.find(90)->second.second << ")\n";
-  std::cout << "68% -->  (" << xBand.find(68)->second.first << ", " << xBand.find(68)->second.second << ")   (" << yBand.find(68)->second.first << "," << yBand.find(68)->second.second << ")\n"; 
-
-  // Now we need to label each voxel according to the confidence band
-  for (auto& voxel : m_voxelList)
-  {
-    // Do this for decreasing confidence
-    voxel.SetCB(0);
-    if (xBand.find(95)->second.first < voxel.X() && voxel.X() < xBand.find(95)->second.second && 
-        yBand.find(95)->second.first < voxel.Y() && voxel.Y() < yBand.find(95)->second.second) {voxel.SetCB(95);}
-    if (xBand.find(90)->second.first < voxel.X() && voxel.X() < xBand.find(90)->second.second &&
-        yBand.find(90)->second.first < voxel.Y() && voxel.Y() < yBand.find(90)->second.second) {voxel.SetCB(90);}
-    if (xBand.find(68)->second.first < voxel.X() && voxel.X() < xBand.find(68)->second.second && 
-        yBand.find(68)->second.first < voxel.Y() && voxel.Y() < yBand.find(68)->second.second) {voxel.SetCB(68);} 
-    //std::cout << voxel.CB() << std::endl;
-  }
 }*/
 
 std::pair<unsigned, unsigned> Analyzer::InitData(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const unsigned& trigger)
@@ -492,6 +455,47 @@ std::pair<unsigned, unsigned> Analyzer::InitData(SiPMToTriggerMap& sipmToTrigger
 
   return std::make_pair(maxSiPM, max);
 }
+/*
+Double_t Analyzer::JointCLFunc(Double_t *x, Double_t *par)
+{
+  // Rotate our coordinate system
+  TVectorD newXY(2);
+  newXY[0] = m_fisherEigenvectors[0][0]*m_mlX + m_fisherEigenvectors[1][0]*m_mlY;
+  newXY[1] = m_fisherEigenvectors[0][1]*m_mlX + m_fisherEigenvectors[1][1]*m_mlY;
+
+  //std::cout << "New X = " << newXY[0] << "  new Y = " << newXY[1] << std::endl;
+
+  // Now form the equations 
+  Double_t a      = m_deltaX.find(par[0])->second;
+  Double_t b      = m_deltaY.find(par[0])->second;
+  Double_t xShift = m_fisherEigenvectors[0][0]*x[0] + m_fisherEigenvectors[1][0]*x[1] - newXY[0];
+  Double_t yShift = m_fisherEigenvectors[0][1]*x[0] + m_fisherEigenvectors[1][1]*x[1] - newXY[1];
+
+  Double_t eq = (xShift*xShift)/(a*a) + (yShift*yShift)/(b*b);
+
+  return eq;
+}*/
+
+std::string Analyzer::JointCLFunc(const float& cl)
+{
+  // Rotate our coordinate system
+  TVectorD newXY(2);
+  newXY[0] = m_fisherEigenvectors[0][0]*m_mlX + m_fisherEigenvectors[1][0]*m_mlY;
+  newXY[1] = m_fisherEigenvectors[0][1]*m_mlX + m_fisherEigenvectors[1][1]*m_mlY;
+
+  //std::cout << "New X = " << newXY[0] << "  new Y = " << newXY[1] << std::endl;
+
+  // Now form the equations 
+  float a      = m_deltaX.find(cl)->second;
+  float b      = m_deltaY.find(cl)->second;
+  std::cout << "a = " << a << " b = " << b << std::endl;
+
+  std::string xShift = "(" + std::to_string(m_fisherEigenvectors[0][0])+"*x +" + std::to_string(m_fisherEigenvectors[1][0]) + "*y - " + std::to_string(newXY[0]) + ")";
+  std::string yShift = "(" + std::to_string(m_fisherEigenvectors[0][1]) + "*x +" + std::to_string(m_fisherEigenvectors[1][1]) + "*y - " + std::to_string(newXY[1]) + ")";
+
+  std::string eq = std::to_string(TMath::Exp(m_mlLogLikelihood)) + "*TMath::Exp( -("+xShift+"*"+xShift+")/(2*"+std::to_string(a*a)+") )*TMath::Exp( -("+yShift+"*"+yShift+")/(2*"+std::to_string(b*b)+") )";
+  return eq;
+}
 
 void Analyzer::MakePlot()
 {
@@ -499,8 +503,6 @@ void Analyzer::MakePlot()
 
   // Likelihood distribution for m_mlN0
   TH2D likelihoodDist("likelihoodDist", "Likelihood Distribution", std::sqrt(m_nVoxels), -m_diskRadius, m_diskRadius, std::sqrt(m_nVoxels), -m_diskRadius, m_diskRadius); 
-  // Confidence bands
-  //TH2D *confidenceDist = new TH2D("confidenceDist", "confidenceDist", std::sqrt(m_nVoxels), -m_diskRadius, m_diskRadius, std::sqrt(m_nVoxels), -m_diskRadius, m_diskRadius); 
   
   for (const auto& voxel : m_voxelList)
   {
@@ -510,71 +512,82 @@ void Analyzer::MakePlot()
     unsigned xBin = likelihoodDist.GetXaxis()->FindBin(voxel.X());
     unsigned yBin = likelihoodDist.GetXaxis()->FindBin(voxel.Y());
     likelihoodDist.SetBinContent(xBin, yBin, TMath::Exp(logLikelihood));
-
-    //std::cout << "x = " << voxel.X() << " y = " << voxel.Y() << " cb = " << voxel.CB() << std::endl;
-
-    //confidenceDist->SetBinContent(xBin, yBin, voxel.CB());
+  } 
+    
+  // Overlay the single confidence intervals only if this events "passed" the test
+  if (!m_doCI) 
+  {
+    std::cout << "\nNOTE: EIGENVALUES > 0. NOT DRAWING CI!\n";
+    return;
   }
-  likelihoodDist.Write();   
-  
-  // Overlay the single confidence intervals
-  TGraph g1(5), g2(5), g3(5);
-  // 68
-  g1.SetPoint(0, m_mlX+m_deltaX.find(68)->second,  m_mlY+m_deltaY.find(68)->second);  
-  g1.SetPoint(1, m_mlX-m_deltaX.find(68)->second,  m_mlY+m_deltaY.find(68)->second); 
-  g1.SetPoint(2, m_mlX-m_deltaX.find(68)->second,  m_mlY-m_deltaY.find(68)->second); 
-  g1.SetPoint(3, m_mlX+m_deltaX.find(68)->second,  m_mlY-m_deltaY.find(68)->second); 
-  g1.SetPoint(4, m_mlX+m_deltaX.find(68)->second,  m_mlY+m_deltaY.find(68)->second); 
-  // 90
-  g2.SetPoint(0, m_mlX+m_deltaX.find(90)->second,  m_mlY+m_deltaY.find(90)->second); 
-  g2.SetPoint(1, m_mlX-m_deltaX.find(90)->second,  m_mlY+m_deltaY.find(90)->second); 
-  g2.SetPoint(2, m_mlX-m_deltaX.find(90)->second,  m_mlY-m_deltaY.find(90)->second); 
-  g2.SetPoint(3, m_mlX+m_deltaX.find(90)->second,  m_mlY-m_deltaY.find(90)->second); 
-  g2.SetPoint(4, m_mlX+m_deltaX.find(90)->second,  m_mlY+m_deltaY.find(90)->second); 
-  // 95
-  g3.SetPoint(0, m_mlX+m_deltaX.find(95)->second,  m_mlY+m_deltaY.find(95)->second); 
-  g3.SetPoint(1, m_mlX-m_deltaX.find(95)->second,  m_mlY+m_deltaY.find(95)->second); 
-  g3.SetPoint(2, m_mlX-m_deltaX.find(95)->second,  m_mlY-m_deltaY.find(95)->second); 
-  g3.SetPoint(3, m_mlX+m_deltaX.find(95)->second,  m_mlY-m_deltaY.find(95)->second);  
-  g3.SetPoint(4, m_mlX+m_deltaX.find(95)->second,  m_mlY+m_deltaY.find(95)->second);  
 
-  g1.SetLineWidth(5);
-  g1.SetLineColor(33);
-  g2.SetLineWidth(5);
-  g2.SetLineColor(44);
-  g3.SetLineWidth(5);
-  g3.SetLineColor(46);
-
-  TLegend leg(0.1,0.6,0.3,0.7); 
-  leg.AddEntry(&g1, "68% CL", "l");
-  leg.AddEntry(&g2, "90% CL", "l"); 
-  leg.AddEntry(&g3, "95% CL", "l");  
+  // Form our equation
+  std::string delX2    = std::to_string(m_sigmaInverse[0])+"*(x - [1])*(x - [1])";
+  std::string delY2    = std::to_string(m_sigmaInverse[3])+"*(y - [2])*(y - [2])";
+  std::string delXdelY = "2*"+std::to_string(m_sigmaInverse[1])+"*(x - [1])*(y - [2])";
+  std::string exp      = delX2 + " + " + delXdelY + " + " + delY2;
+  std::string eq       = "[0]*TMath::Exp( -1*("+exp+") )";
  
+  //TF2 *bigaus = new TF2("bigaus", eq.c_str(), -m_diskRadius, m_diskRadius, -m_diskRadius, m_diskRadius);
+  //bigaus->SetParameters(1.0, m_mlX, m_mlY);
+
+
+  /*// Compute the rotation angle
+  float dotProduct  = m_fisherEigenvectors[0][0]*m_mlX + m_fisherEigenvectors[0][1]*m_mlY;
+  float cosThetaRot = dotProduct/m_mlRadius; 
+  float sinThetaRot = std::sqrt(1 - cosThetaRot*cosThetaRot);
+  
+  // Compute the rotated means
+  TVectorD newXY(2);
+  newXY[0] =  m_mlX*cosThetaRot + m_mlY*sinThetaRot;
+  newXY[1] = -m_mlX*sinThetaRot + m_mlY*cosThetaRot; 
+ 
+  std::string xP    = "x*" +std::to_string(cosThetaRot)+" + y*"+std::to_string(sinThetaRot);
+  std::string yP    = "-x*"+std::to_string(sinThetaRot)+" + y*"+std::to_string(cosThetaRot);
+  std::string delX2 = "(("+xP+"-[1])*("+xP+"-[1]))/(2*[2]*[2])";
+  std::string delY2 = "(("+yP+"-[3])*("+yP+"-[3]))/(2*[4]*[4])";
+
+  std::string eq = "[0]*TMath::Exp( -"+delX2+" - "+delY2+" )";*/
+
+  TF2 bigaus("bigaus", "bigaus", m_mlX-1, m_mlX+1, m_mlY-1, m_mlY+1);
+  bigaus.SetParameters(TMath::Exp(m_mlLogLikelihood), m_mlX, m_sigmaXDiag, m_mlY, m_sigmaYDiag, 0.1);
+  likelihoodDist.Fit(&bigaus, "NR"); 
+
+  /*// Contours
+  TBackCompFitter *fitter = ((TBackCompFitter *)(TVirtualFitter::GetFitter()));
+  
+  int par1 = 1; // index of mean X
+  int par2 = 3; // index of mean Y
+
+  TGraph *gr1 = new TGraph( 80 );
+  gr1->SetTitle(";top mass [GeV];#alpha_{S}^{}");
+  gr1->SetFillColor(kGreen); gr1->SetLineColor(kBlack);
+  double cl1 = 0.6827; // 1 sigma
+  fitter->Contour(par1, par2, gr1, cl1);
+  gr1->SetPoint(gr1->GetN(), gr1->GetX()[0], gr1->GetY()[0]); // "close" it
+ 
+  TGraph *gr2 = new TGraph( 80 );
+  gr2->SetTitle(";top mass [GeV];#alpha_{S}^{}");
+  gr2->SetFillColor(kYellow); gr2->SetLineColor(kBlack);
+  double cl2 = 0.9545; // 2 sigma
+  fitter->Contour(par1, par2, gr2, cl2);
+  gr2->SetPoint(gr2->GetN(), gr2->GetX()[0], gr2->GetY()[0]); // "close" it*/
+
   TCanvas c1("c1", "c1", 800, 800);
   likelihoodDist.Draw("colz");
-  g1.Draw("same");
-  g2.Draw("same");
-  g3.Draw("same");
-  leg.Draw("same"); 
+  bigaus.Draw("same");
+  /*gr2->Draw("AF");*/ //gr2->Draw("L");
+  /*gr1->Draw("F");*/  //gr1->Draw("L"); 
+  c1.Update();
   c1.Write();
+  bigaus.Write();
 
+//  delete bigaus;
 
-  /*gStyle->SetOptStat(0);
-  
-  TCanvas c1("c1","c1",600,400);
-  Int_t palette[4];
-  palette[0] = 15;
-  palette[1] = 20;
-  palette[2] = 23;
-  palette[3] = 30;
-  gStyle->SetPalette(4,palette);
-  // gStyle->SetPalette(kBird);
-
-  c1.SetTitle("Likelihood Heat Map");
-  confidenceDist->Draw("colz");
-  //c1.Update();
- // c1.Write(); 
-  //confidenceDist->Write();*/
+  /*TLegend leg(0.1,0.6,0.3,0.7); 
+  leg.AddEntry(&g1, "68% CL", "l");
+  leg.AddEntry(&g2, "90% CL", "l"); 
+  leg.AddEntry(&g3, "95% CL", "l"); */
  
   f.Close();
 }

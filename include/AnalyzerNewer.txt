@@ -15,10 +15,6 @@
 #include "TThread.h"
 #include <iostream>
 #include "TMath.h"
-#include "TMatrixD.h"
-#include "TVectorD.h"
-#include "TArrayD.h"
-#include "TDecompLU.h"
 
 namespace wheel {
 
@@ -68,28 +64,16 @@ private:
   void     ComputeConfidenceIntervals();
   void     MakePlot();
   void     ConvertToPolar(float& r, float& thetaDeg, const float& x, const float& y);
-  void     FirstEstimate(const std::pair<unsigned, unsigned>& maxSiPM_counts);
-  void     RefineEstimate(unsigned& iterator);
-  std::string JointCLFunc(const float& cl);
  
   double                       m_mlLogLikelihood;
-  float                        m_mlN0;
+  unsigned                     m_mlN0;
   float                        m_mlX;
   float                        m_mlY;
   float                        m_mlRadius;
   float                        m_mlTheta;
-  float                        m_oldGuessX;  
-  float                        m_oldGuessY;  
-  float                        m_oldGuessN0;
-  double                       m_oldGuessMLogL;
-  float                        m_newGuessX;  
-  float                        m_newGuessY;
-  float                        m_newGuessN0;  
-  double                       m_newGuessMLogL;
   float                        m_beta;
   float                        m_diskRadius;
   float                        m_attenuationLength;
-  unsigned                     m_maxIterations;
   unsigned                     m_nSiPMs;
   unsigned                     m_nVoxels;
   std::list<Voxel>             m_voxelList;
@@ -97,13 +81,6 @@ private:
   std::map<float, float>       m_deltaY;
   std::map<unsigned, unsigned> m_data;  
   std::string                  m_recoOutputFile;
-  std::vector<float>           m_fisherEigenvalues;
-  std::vector<std::vector<float>> m_fisherEigenvectors;
-  std::vector<float>           m_sigmaInverse;
-  float                        m_sigmaXDiag;
-  float                        m_sigmaYDiag;
-  float                        m_correlation;
-  bool                         m_doCI;
 };
 }
 
