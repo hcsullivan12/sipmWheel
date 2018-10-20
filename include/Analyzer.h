@@ -14,6 +14,7 @@
 #include "Rtypes.h"
 #include "TThread.h"
 #include <iostream>
+#include "TMath.h"
 
 namespace wheel {
 
@@ -23,17 +24,21 @@ public:
 	Voxel(const float& x, const float& y, const float& r, const float& theta);
 	~Voxel();
 		
-	float X()     const { return m_x; };
-	float Y()     const { return m_y; };
-  float R()     const { return m_r; };
-  float Theta() const { return m_theta; }
+	float       X()     const { return m_x; };
+	float       Y()     const { return m_y; };
+  float       R()     const { return m_r; };
+  float       Theta() const { return m_theta; };
+  double      CB()    const { return m_cb; };
+
+  void SetCB(const double& cb) { m_cb = cb; };
 
 private:
     
-  float m_x;      ///< x position that this voxel is centered on
-  float m_y;      ///< y position that this voxel is centered on
-  float m_r;      ///< radius from center for this voxel
-  float m_theta;  ///< angle with respect to sipm 1 (in degrees)
+  float  m_x;      ///< x position that this voxel is centered on
+  float  m_y;      ///< y position that this voxel is centered on
+  float  m_r;      ///< radius from center for this voxel
+  float  m_theta;  ///< angle with respect to sipm 1 (in degrees)
+  double m_cb;
 };
 
 class Analyzer {
@@ -46,35 +51,36 @@ public:
   void  Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const unsigned& trigger);
   float ComputeLambda(const float& r, const float& theta, const unsigned& N0, const unsigned& m);
 
-  AccumulatorMap            GetAccumulatorMap() const { return m_accumulatorMap; };
-  AccumulatorMap            GetMLEParameters()  const { return m_mleParameters; };
-  std::map<unsigned, float> GetData()           const { return m_data; };
+  std::map<unsigned, unsigned> GetData()           const { return m_data; };
   
 private:
 
   void     Initialize(const Configuration& config);
   std::pair<unsigned, unsigned> InitData(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const unsigned& trigger);
-  float    ComputeLikelihood(const float& r, const float& theta, const unsigned& N0);
+  double   ComputeLogLikelihood(const float& x, const float& y, const unsigned& N0);
   void     Handle(const unsigned& N0);
   void     FillAccumulatorMap();
   void     InitVoxelList();
   void     ComputeConfidenceIntervals();
-
-  float                     m_mlLikelihood;
-  float                     m_mlN0;
-  float                     m_mlX;
-  float                     m_mlY;
-  float                     m_mlRadius;
-  float                     m_mlTheta;
-  float                     m_beta;
-  float                     m_diskRadius;
-  float                     m_attenuationLength;
-  unsigned                  m_nSiPMs;
-  unsigned                  m_nVoxels;
-  std::list<Voxel>          m_voxelList;
-  std::map<unsigned, float> m_data;  
-  AccumulatorMap            m_accumulatorMap;
-  AccumulatorMap            m_mleParameters;
+  void     MakePlot();
+  void     ConvertToPolar(float& r, float& thetaDeg, const float& x, const float& y);
+ 
+  double                       m_mlLogLikelihood;
+  unsigned                     m_mlN0;
+  float                        m_mlX;
+  float                        m_mlY;
+  float                        m_mlRadius;
+  float                        m_mlTheta;
+  float                        m_beta;
+  float                        m_diskRadius;
+  float                        m_attenuationLength;
+  unsigned                     m_nSiPMs;
+  unsigned                     m_nVoxels;
+  std::list<Voxel>             m_voxelList;
+  std::map<float, float>       m_deltaX;
+  std::map<float, float>       m_deltaY;
+  std::map<unsigned, unsigned> m_data;  
+  std::string                  m_recoOutputFile;
 };
 }
 

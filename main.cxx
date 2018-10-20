@@ -187,7 +187,7 @@ void Reco(const wheel::Configuration& myConfig)
     //wheel::Reconstructor reconstructor;
     //reconstructor.Reconstruct(sipmToTriggerMap, sipmInfoMap, myConfig, trigger);
     // Now make the plots
-    MakeRecoPlots(analyzer, myConfig, trigger);
+    //MakeRecoPlots(analyzer, myConfig, trigger);
   }
 }
 
@@ -523,7 +523,7 @@ Double_t disk(Double_t* x, Double_t* par)
   return f;
 }
 
-void MakeRecoPlots(wheel::Analyzer& analyzer, const wheel::Configuration& config, const unsigned& trigger)
+/*void MakeRecoPlots(wheel::Analyzer& analyzer, const wheel::Configuration& config, const unsigned& trigger)
 {
   // Get the maps needed for the plots
   auto accumulatorMap = analyzer.GetAccumulatorMap();
@@ -643,14 +643,14 @@ void MakeRecoPlots(wheel::Analyzer& analyzer, const wheel::Configuration& config
   const float& attenL = mleParameters[0].second.find("attenuationLength")->second;
   for (const auto& index : accumulatorMap)
   {
-    /*// Convert the r and theta to x and y
+   I commented this ---// Convert the r and theta to x and y
     double x = index.second.find("radius")->second*TMath::Cos(index.second.find("theta")->second*(TMath::Pi()/180) );
     double y = index.second.find("radius")->second*TMath::Sin(index.second.find("theta")->second*(TMath::Pi()/180) );
 
-    lhHist.SetBinContent(lhHist.GetXaxis()->FindBin(x), lhHist.GetYaxis()->FindBin(y), TMath::Exp(index.second.find("likelihood")->second));*/
-    /*std::cout << "Radius     = " << index.second.find("radius")->second     << "  "
+    lhHist.SetBinContent(lhHist.GetXaxis()->FindBin(x), lhHist.GetYaxis()->FindBin(y), TMath::Exp(index.second.find("likelihood")->second));---//
+    I commented this ---//std::cout << "Radius     = " << index.second.find("radius")->second     << "  "
               << "Theta      = " << index.second.find("theta")->second      << "  "
-              << "Likelihood = " << index.second.find("likelihood")->second << std::endl;    */
+              << "Likelihood = " << index.second.find("likelihood")->second << std::endl;    ---//
     lhHist.SetBinContent(lhHist.GetXaxis()->FindBin(index.second.find("theta")->second),
                          lhHist.GetYaxis()->FindBin(index.second.find("radius")->second), 
                          TMath::Exp(index.second.find("likelihood")->second));
@@ -665,15 +665,13 @@ void MakeRecoPlots(wheel::Analyzer& analyzer, const wheel::Configuration& config
   lhHist.Draw("lego2 pol");
 
   // Draw the mle for r, theta
- /* Double_t theta[1]   = {mleParameters[0].second.find("theta")->second*(TMath::Pi()/180)};
+ I commented this ---// Double_t theta[1]   = {mleParameters[0].second.find("theta")->second*(TMath::Pi()/180)};
   Double_t radius[1]  = {mleParameters[0].second.find("radius")->second};
   Double_t etheta[1]  = {(config.thetaBinSize/2)*(TMath::Pi()/180)};
-  Double_t eradius[1] = {config.radiusBinSize/2};*/
+  Double_t eradius[1] = {config.radiusBinSize/2}; --- //
   
-  /*std::cout << theta[0]*(180/TMath::Pi()) << " " << radius[0] << " " << etheta[0]*(180/TMath::Pi()) << " " << eradius[0] << std::endl;*/
-  
-  // This does not work for some reason, not plotting marker
-  /* TGraphPolar p(1, theta, radius, etheta, eradius);
+ I commented this --- // This does not work for some reason, not plotting marker
+   TGraphPolar p(1, theta, radius, etheta, eradius);
   p.SetMarkerStyle(8);
   p.SetMarkerSize(2);
   p.SetMarkerColor(2);
@@ -691,7 +689,7 @@ void MakeRecoPlots(wheel::Analyzer& analyzer, const wheel::Configuration& config
   /*TMarker m(theta[0], radius[0], 8);
   m.SetMarkerColor(2);
   m.SetMarkerSize(1.5);
-  m.Draw("same");*/
+  m.Draw("same"); ---//
 
   // Write these to a file
   std::cout << "\nSaving plots to reco output file... " << std::endl;
@@ -699,4 +697,4 @@ void MakeRecoPlots(wheel::Analyzer& analyzer, const wheel::Configuration& config
   c1.Write();
   c2.Write();
   c3.Write();
-}
+}*/

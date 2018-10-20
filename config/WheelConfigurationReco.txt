@@ -19,4 +19,4 @@ gains=0.005,0.005,0.005,0.005
 breakdowns=71,71,71,71
 diskRadius=5.7
 attenuationLength=30
-nVoxels=2500
+nVoxels=360000
