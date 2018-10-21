@@ -299,3 +299,114 @@
   g3.SetLineWidth(5);
   g3.SetLineColor(46);
 
+
+/*// Form our equation
+  std::string delX2    = std::to_string(m_sigmaInverse[0])+"*(x - [1])*(x - [1])";
+  std::string delY2    = std::to_string(m_sigmaInverse[3])+"*(y - [2])*(y - [2])";
+  std::string delXdelY = "2*"+std::to_string(m_sigmaInverse[1])+"*(x - [1])*(y - [2])";
+  std::string exp      = delX2 + " + " + delXdelY + " + " + delY2;
+  std::string eq       = "[0]*TMath::Exp( -1*("+exp+") )";
+
+  std::cout << eq << std::endl;*/
+ 
+  /*TF2 temp("temp", eq.c_str(), -m_diskRadius, m_diskRadius, -m_diskRadius, m_diskRadius);
+  temp.SetParameters(1, m_mlX, m_mlY);*/
+
+
+  //TF2 bigaus("bigaus", "bigaus", m_mlX-1, m_mlX+1, m_mlY-1, m_mlY+1);
+  //bigaus.SetParameters(TMath::Exp(m_mlLogLikelihood), m_mlX, m_sigmaXDiag, m_mlY, m_sigmaYDiag, 0.1);
+  //likelihoodDist.Fit(&bigaus, "NRQ"); 
+ 
+/*  std::cout << bigaus.GetParameter(0) << " " << bigaus.GetParameter(1) << " " << bigaus.GetParameter(2) << " " << bigaus.GetParameter(3) << bigaus.GetParameter(4) << " " << bigaus.GetParameter(5) << std::endl;*/
+
+
+/*
+void Analyzer::ComputeConfidenceIntervals()
+{
+  // Some notes:
+  //
+  // [x-, x+]  --> x +- c*1/sqrt(I)
+  //
+  // Here: c*1/sqrt(I) = m_delta.find(percent)->second
+  //
+  // We will appoximate derivatives using standard numerical techniques.
+  // We will compute the single CI, diagonalize to compute the joint CI,
+  // where:
+  //
+  // CI = m_mlEstimate +- c*1/sqrt(-l'')
+  //
+
+  // We cannot form CI for events where the eigenvalues of Fisher are > 0!
+  if (m_fisherEigenvalues[0] > 0 || m_fisherEigenvalues[1] > 0) return;
+
+  // Store the sigmas
+  m_sigmaX = 1.000/std::sqrt(-m_fisherEigenvalues[0]);
+  m_sigmaY = 1.000/std::sqrt(-m_fisherEigenvalues[1]);
+
+
+  // Form the margins for each CL
+  m_deltaX.emplace(95, 1.960/std::sqrt(-m_fisherEigenvalues[0]));
+  m_deltaX.emplace(90, 1.645/std::sqrt(-m_fisherEigenvalues[0]));
+  m_deltaX.emplace(68, 1.000/std::sqrt(-m_fisherEigenvalues[0]));
+
+  m_deltaY.emplace(95, 1.960/std::sqrt(-m_fisherEigenvalues[1]));
+  m_deltaY.emplace(90, 1.645/std::sqrt(-m_fisherEigenvalues[1])); 
+  m_deltaY.emplace(68, 1.000/std::sqrt(-m_fisherEigenvalues[1]));
+
+  std::cout << m_deltaX.find(90)->second << "  " << m_deltaY.find(90)->second << std::endl;
+
+}*/
+
+
+
+// Store the diagonal sigmas
+    m_sigmaXDiag = std::sqrt(-m_fisherEigenvalues[0]);
+    m_sigmaYDiag = std::sqrt(-m_fisherEigenvalues[1]);
+
+    // We want to rotate back to our old coordinates now
+    // Our rotation matrix is formed by the eigenvectors
+    TArrayD rotData(4);
+    rotData[0] = e1[0];
+    rotData[1] = e2[0];
+    rotData[2] = e1[1];
+    rotData[3] = e2[1];
+    // Our diagonal matrix has 1/m_sigmaXDiag^2 and 1/m_sigmaYDiag^2
+    TArrayD diagData(4);
+    diagData[0] = 1/(m_sigmaXDiag*m_sigmaXDiag);
+    diagData[1] = 0;
+    diagData[2] = 0;
+    diagData[3] = 1/(m_sigmaYDiag*m_sigmaYDiag);
+
+    TMatrixD rotationMatrix(2,2);
+    rotationMatrix.SetMatrixArray(rotData.GetArray());
+    TMatrixD diagMatrix(2,2);
+    diagMatrix.SetMatrixArray(diagData.GetArray());
+
+    //rotationMatrix.Print();
+    //diagMatrix.Print();
+    //std::cout << -m_fisherEigenvalues[0] << " " << -m_fisherEigenvalues[1] << std::endl;
+
+    TDecompLU lu(rotationMatrix);
+    TMatrixD inverseRotationMatrix = rotationMatrix;
+    if (!lu.Decompose()) 
+    {
+      std::cout << "Decomposition failed, matrix singular!!" << std::endl;
+      return;
+    }
+    else lu.Invert(inverseRotationMatrix);
+
+    // Now we have the matrices we need
+    // Calculate:
+    //
+    // Sigma^-1 = R*Diag*R^-1
+    //
+   
+    TMatrixD sigmaInverseMatrix = rotationMatrix*diagMatrix*inverseRotationMatrix;
+    // Now invert this!
+    TDecompLU lu2(sigmaInverseMatrix);
+    TMatrixD sigmaMatrix = sigmaInverseMatrix;
+    if (!lu2.Decompose()) 
+    {
+      std::cout << "Decomposition failed, matrix singular!!" << std::endl;
+      return;
+

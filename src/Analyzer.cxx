@@ -141,9 +141,6 @@ void Analyzer::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap
             << "Y                  = " << m_mlY             << " cm\n"
             << "Radius             = " << m_mlRadius        << " cm\n"
             << "Theta              = " << m_mlTheta         << " deg\n";
-
-  // Estimate the confidence interval
-  //ComputeConfidenceIntervals();
  
   clock_t end = clock();
   double duration = ((double) (end - start)) / CLOCKS_PER_SEC;
@@ -274,8 +271,6 @@ void Analyzer::RefineEstimate(unsigned& iterator)
   double l13 = ComputeLogLikelihood(m_mlX-h, m_mlY-h, m_mlN0);
   double d2ldxdy = (l10 - l11 - l12 + l13)/(h*h);
 
-  //std::cout << "2nd Derivatives => " << d2ldx2 << " " << d2ldy2 << " " << d2ldxdy << "\n";
-
   // Now we can form our Fisher matrix
   TArrayD data1(2);
   data1[0] = dldx; data1[1] = dldy;
@@ -301,7 +296,7 @@ void Analyzer::RefineEstimate(unsigned& iterator)
   }
   else lu.Invert(inverseFisherMatrix);
 
-  // Multiply Fisher and vector
+  // Multiply inverse Fisher and vector
   auto m = inverseFisherMatrix*lPVector;
 
   // Our convention --> x, y
@@ -319,10 +314,16 @@ void Analyzer::RefineEstimate(unsigned& iterator)
   m_mlY             = newGuessY;
   ConvertToPolar(m_mlRadius, m_mlTheta, m_mlX, m_mlY);
   m_mlLogLikelihood = newGuessMLogL;
- 
+
   // We want the eigenvalues and eigenvectors
+  // Not sure why we're getting warnings here
+  // These are symmetric matrices...
+  // Nonetheless, this seems to be returning the correct values
   TVectorD eigenvalues(2);
-  TMatrixD eigenvectors = fisherMatrix.EigenVectors(eigenvalues);
+  fisherMatrix.Print();
+  inverseFisherMatrix.Print();
+  TMatrixD eigenvectors = inverseFisherMatrix.EigenVectors(eigenvalues);
+   
   // Clear old memory
   m_fisherEigenvalues.clear();
   m_fisherEigenvectors.clear();
@@ -331,99 +332,17 @@ void Analyzer::RefineEstimate(unsigned& iterator)
   m_fisherEigenvalues.push_back(eigenvalues[1]);
   // Store eigenvectors
   std::vector<float> e1 = {eigenvectors[0][0], eigenvectors[0][1]};
-  std::vector<float> e2 = {eigenvectors[1][0], eigenvectors[1][1]};
-  m_fisherEigenvectors.push_back(e1);
-  m_fisherEigenvectors.push_back(e2);
- 
+  std::vector<float> e2 = {eigenvectors[1][0], eigenvectors[1][1]}; 
+
   // Check the eigenvalues 
   if (eigenvalues[0] < 0 && eigenvalues[1] < 0) 
   { 
     m_doCI = true; 
-    // Store the diagonal sigmas
-    m_sigmaXDiag = 1.000/std::sqrt(-m_fisherEigenvalues[0]);
-    m_sigmaYDiag = 1.000/std::sqrt(-m_fisherEigenvalues[1]);
-
-    // We want to rotate back to our old coordinates now
-    // Our rotation matrix is formed by the eigenvectors
-    TArrayD rotData(4);
-    rotData[0] = e1[0];
-    rotData[1] = e2[0];
-    rotData[2] = e1[1];
-    rotData[3] = e2[1];
-    // Our diagonal matrix has 1/m_sigmaXDiag^2 and 1/m_sigmaYDiag^2
-    TArrayD diagData(4);
-    diagData[0] = 1/(m_sigmaXDiag*m_sigmaXDiag);
-    diagData[1] = 0;
-    diagData[2] = 0;
-    diagData[3] = 1/(m_sigmaYDiag*m_sigmaYDiag);
-
-    TMatrixD rotationMatrix(2,2);
-    rotationMatrix.SetMatrixArray(rotData.GetArray());
-    TMatrixD diagMatrix(2,2);
-    diagMatrix.SetMatrixArray(diagData.GetArray());
-
-    TDecompLU lu(rotationMatrix);
-    TMatrixD inverseRotationMatrix = rotationMatrix;
-    if (!lu.Decompose()) 
-    {
-      std::cout << "Decomposition failed, matrix singular!!" << std::endl;
-      return;
-    }
-    else lu.Invert(inverseRotationMatrix);
-
-    // Now we have the matrices we need
-    // Calculate:
-    //
-    // Sigma^-1 = R*Diag*R^-1
-    //
-   
-    TMatrixD sigmaInverseMatrix = rotationMatrix*diagMatrix*inverseRotationMatrix;
-    // Store these
-    m_sigmaInverse.clear();
-    m_sigmaInverse.push_back(sigmaInverseMatrix[0][0]);  m_sigmaInverse.push_back(sigmaInverseMatrix[0][1]);
-    m_sigmaInverse.push_back(sigmaInverseMatrix[1][0]);  m_sigmaInverse.push_back(sigmaInverseMatrix[1][1]);
-
     return; 
   }
   // Otherwise, keep searching
   RefineEstimate(iterator);
 }
-/*
-void Analyzer::ComputeConfidenceIntervals()
-{
-  // Some notes:
-  //
-  // [x-, x+]  --> x +- c*1/sqrt(I)
-  //
-  // Here: c*1/sqrt(I) = m_delta.find(percent)->second
-  //
-  // We will appoximate derivatives using standard numerical techniques.
-  // We will compute the single CI, diagonalize to compute the joint CI,
-  // where:
-  //
-  // CI = m_mlEstimate +- c*1/sqrt(-l'')
-  //
-
-  // We cannot form CI for events where the eigenvalues of Fisher are > 0!
-  if (m_fisherEigenvalues[0] > 0 || m_fisherEigenvalues[1] > 0) return;
-
-  // Store the sigmas
-  m_sigmaX = 1.000/std::sqrt(-m_fisherEigenvalues[0]);
-  m_sigmaY = 1.000/std::sqrt(-m_fisherEigenvalues[1]);
-
-
-  // Form the margins for each CL
-  m_deltaX.emplace(95, 1.960/std::sqrt(-m_fisherEigenvalues[0]));
-  m_deltaX.emplace(90, 1.645/std::sqrt(-m_fisherEigenvalues[0]));
-  m_deltaX.emplace(68, 1.000/std::sqrt(-m_fisherEigenvalues[0]));
-
-  m_deltaY.emplace(95, 1.960/std::sqrt(-m_fisherEigenvalues[1]));
-  m_deltaY.emplace(90, 1.645/std::sqrt(-m_fisherEigenvalues[1])); 
-  m_deltaY.emplace(68, 1.000/std::sqrt(-m_fisherEigenvalues[1]));
-
-  std::cout << m_deltaX.find(90)->second << "  " << m_deltaY.find(90)->second << std::endl;
-
-}*/
 
 std::pair<unsigned, unsigned> Analyzer::InitData(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const unsigned& trigger)
 { 
@@ -455,47 +374,6 @@ std::pair<unsigned, unsigned> Analyzer::InitData(SiPMToTriggerMap& sipmToTrigger
 
   return std::make_pair(maxSiPM, max);
 }
-/*
-Double_t Analyzer::JointCLFunc(Double_t *x, Double_t *par)
-{
-  // Rotate our coordinate system
-  TVectorD newXY(2);
-  newXY[0] = m_fisherEigenvectors[0][0]*m_mlX + m_fisherEigenvectors[1][0]*m_mlY;
-  newXY[1] = m_fisherEigenvectors[0][1]*m_mlX + m_fisherEigenvectors[1][1]*m_mlY;
-
-  //std::cout << "New X = " << newXY[0] << "  new Y = " << newXY[1] << std::endl;
-
-  // Now form the equations 
-  Double_t a      = m_deltaX.find(par[0])->second;
-  Double_t b      = m_deltaY.find(par[0])->second;
-  Double_t xShift = m_fisherEigenvectors[0][0]*x[0] + m_fisherEigenvectors[1][0]*x[1] - newXY[0];
-  Double_t yShift = m_fisherEigenvectors[0][1]*x[0] + m_fisherEigenvectors[1][1]*x[1] - newXY[1];
-
-  Double_t eq = (xShift*xShift)/(a*a) + (yShift*yShift)/(b*b);
-
-  return eq;
-}*/
-
-std::string Analyzer::JointCLFunc(const float& cl)
-{
-  // Rotate our coordinate system
-  TVectorD newXY(2);
-  newXY[0] = m_fisherEigenvectors[0][0]*m_mlX + m_fisherEigenvectors[1][0]*m_mlY;
-  newXY[1] = m_fisherEigenvectors[0][1]*m_mlX + m_fisherEigenvectors[1][1]*m_mlY;
-
-  //std::cout << "New X = " << newXY[0] << "  new Y = " << newXY[1] << std::endl;
-
-  // Now form the equations 
-  float a      = m_deltaX.find(cl)->second;
-  float b      = m_deltaY.find(cl)->second;
-  std::cout << "a = " << a << " b = " << b << std::endl;
-
-  std::string xShift = "(" + std::to_string(m_fisherEigenvectors[0][0])+"*x +" + std::to_string(m_fisherEigenvectors[1][0]) + "*y - " + std::to_string(newXY[0]) + ")";
-  std::string yShift = "(" + std::to_string(m_fisherEigenvectors[0][1]) + "*x +" + std::to_string(m_fisherEigenvectors[1][1]) + "*y - " + std::to_string(newXY[1]) + ")";
-
-  std::string eq = std::to_string(TMath::Exp(m_mlLogLikelihood)) + "*TMath::Exp( -("+xShift+"*"+xShift+")/(2*"+std::to_string(a*a)+") )*TMath::Exp( -("+yShift+"*"+yShift+")/(2*"+std::to_string(b*b)+") )";
-  return eq;
-}
 
 void Analyzer::MakePlot()
 {
@@ -512,82 +390,54 @@ void Analyzer::MakePlot()
     unsigned xBin = likelihoodDist.GetXaxis()->FindBin(voxel.X());
     unsigned yBin = likelihoodDist.GetXaxis()->FindBin(voxel.Y());
     likelihoodDist.SetBinContent(xBin, yBin, TMath::Exp(logLikelihood));
-  } 
-    
-  // Overlay the single confidence intervals only if this events "passed" the test
-  if (!m_doCI) 
-  {
-    std::cout << "\nNOTE: EIGENVALUES > 0. NOT DRAWING CI!\n";
-    return;
-  }
+  }  
 
-  // Form our equation
-  std::string delX2    = std::to_string(m_sigmaInverse[0])+"*(x - [1])*(x - [1])";
-  std::string delY2    = std::to_string(m_sigmaInverse[3])+"*(y - [2])*(y - [2])";
-  std::string delXdelY = "2*"+std::to_string(m_sigmaInverse[1])+"*(x - [1])*(y - [2])";
-  std::string exp      = delX2 + " + " + delXdelY + " + " + delY2;
-  std::string eq       = "[0]*TMath::Exp( -1*("+exp+") )";
- 
-  //TF2 *bigaus = new TF2("bigaus", eq.c_str(), -m_diskRadius, m_diskRadius, -m_diskRadius, m_diskRadius);
-  //bigaus->SetParameters(1.0, m_mlX, m_mlY);
+  // Make copies to draw our contours
+  auto contour68 = likelihoodDist;
+  auto contour90 = likelihoodDist;
+  auto contour95 = likelihoodDist;
 
+  // Set the confidence levels
+  Double_t level68[1], level90[1], level95[1];
+  double A = TMath::Exp(m_mlLogLikelihood);
+  level68[0] = A*TMath::Exp(-0.5*TMath::ChisquareQuantile(0.68,2));
+  level90[0] = A*TMath::Exp(-0.5*TMath::ChisquareQuantile(0.90,2));
+  level95[0] = A*TMath::Exp(-0.5*TMath::ChisquareQuantile(0.95,2));
+  contour68.SetContour(1, level68);
+  contour90.SetContour(1, level90);
+  contour95.SetContour(1, level95);
 
-  /*// Compute the rotation angle
-  float dotProduct  = m_fisherEigenvectors[0][0]*m_mlX + m_fisherEigenvectors[0][1]*m_mlY;
-  float cosThetaRot = dotProduct/m_mlRadius; 
-  float sinThetaRot = std::sqrt(1 - cosThetaRot*cosThetaRot);
-  
-  // Compute the rotated means
-  TVectorD newXY(2);
-  newXY[0] =  m_mlX*cosThetaRot + m_mlY*sinThetaRot;
-  newXY[1] = -m_mlX*sinThetaRot + m_mlY*cosThetaRot; 
- 
-  std::string xP    = "x*" +std::to_string(cosThetaRot)+" + y*"+std::to_string(sinThetaRot);
-  std::string yP    = "-x*"+std::to_string(sinThetaRot)+" + y*"+std::to_string(cosThetaRot);
-  std::string delX2 = "(("+xP+"-[1])*("+xP+"-[1]))/(2*[2]*[2])";
-  std::string delY2 = "(("+yP+"-[3])*("+yP+"-[3]))/(2*[4]*[4])";
-
-  std::string eq = "[0]*TMath::Exp( -"+delX2+" - "+delY2+" )";*/
-
-  TF2 bigaus("bigaus", "bigaus", m_mlX-1, m_mlX+1, m_mlY-1, m_mlY+1);
-  bigaus.SetParameters(TMath::Exp(m_mlLogLikelihood), m_mlX, m_sigmaXDiag, m_mlY, m_sigmaYDiag, 0.1);
-  likelihoodDist.Fit(&bigaus, "NR"); 
-
-  /*// Contours
-  TBackCompFitter *fitter = ((TBackCompFitter *)(TVirtualFitter::GetFitter()));
-  
-  int par1 = 1; // index of mean X
-  int par2 = 3; // index of mean Y
-
-  TGraph *gr1 = new TGraph( 80 );
-  gr1->SetTitle(";top mass [GeV];#alpha_{S}^{}");
-  gr1->SetFillColor(kGreen); gr1->SetLineColor(kBlack);
-  double cl1 = 0.6827; // 1 sigma
-  fitter->Contour(par1, par2, gr1, cl1);
-  gr1->SetPoint(gr1->GetN(), gr1->GetX()[0], gr1->GetY()[0]); // "close" it
- 
-  TGraph *gr2 = new TGraph( 80 );
-  gr2->SetTitle(";top mass [GeV];#alpha_{S}^{}");
-  gr2->SetFillColor(kYellow); gr2->SetLineColor(kBlack);
-  double cl2 = 0.9545; // 2 sigma
-  fitter->Contour(par1, par2, gr2, cl2);
-  gr2->SetPoint(gr2->GetN(), gr2->GetX()[0], gr2->GetY()[0]); // "close" it*/
-
+  // Now draw the distribution and confidence regions
   TCanvas c1("c1", "c1", 800, 800);
+  gStyle->SetOptStat(0);
   likelihoodDist.Draw("colz");
-  bigaus.Draw("same");
-  /*gr2->Draw("AF");*/ //gr2->Draw("L");
-  /*gr1->Draw("F");*/  //gr1->Draw("L"); 
+
+  contour68.SetLineWidth(4);
+  contour90.SetLineWidth(4);
+  contour95.SetLineWidth(4);
+  contour68.SetLineColor(2);
+  contour90.SetLineColor(5);
+  contour95.SetLineColor(3);
+  contour68.Draw("cont3 same");
+  contour90.Draw("cont3 same");
+  contour95.Draw("cont3 same");
+ 
+  // Add a marker for the MLE
+  TMarker xy(m_mlX, m_mlY, 20);
+  xy.SetMarkerSize(2);
+  xy.SetMarkerColor(1);
+  xy.Draw("same");
+
+  // Add our legend
+  TLegend leg(0.1,0.6,0.3,0.7); 
+  leg.AddEntry(&contour68, "68% CL", "l");
+  leg.AddEntry(&contour90, "90% CL", "l"); 
+  leg.AddEntry(&contour95, "95% CL", "l"); 
+  leg.AddEntry(&xy, "MLE Position", "p");
+  leg.Draw("same");
+
   c1.Update();
   c1.Write();
-  bigaus.Write();
-
-//  delete bigaus;
-
-  /*TLegend leg(0.1,0.6,0.3,0.7); 
-  leg.AddEntry(&g1, "68% CL", "l");
-  leg.AddEntry(&g2, "90% CL", "l"); 
-  leg.AddEntry(&g3, "95% CL", "l"); */
  
   f.Close();
 }

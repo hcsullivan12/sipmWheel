@@ -102,6 +102,8 @@ private:
   std::vector<float>           m_sigmaInverse;
   float                        m_sigmaXDiag;
   float                        m_sigmaYDiag;
+  float                        m_sigmaX;
+  float                        m_sigmaY;
   float                        m_correlation;
   bool                         m_doCI;
 };
