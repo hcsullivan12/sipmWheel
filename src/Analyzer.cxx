@@ -61,7 +61,6 @@ void Analyzer::Initialize(const Configuration& config)
   m_mlRadius = 0; m_mlTheta = 0; m_mlN0 = 0; 
   m_recoOutputFile    = config.recoOutputFile;
   m_data.clear();
-  m_doCI = false;
   // Create the voxels
   InitVoxelList();
 }
@@ -134,6 +133,10 @@ void Analyzer::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap
   // Refine the estimation
   unsigned iterator(0);
   std::cout << "\nRefining estimate...\n";
+  // Set our initial guesses
+  m_oldGuessX      = m_mlX;
+  m_oldGuessY      = m_mlY;
+  m_oldGuessMLogL  = m_mlLogLikelihood; 
   RefineEstimate(iterator);
 
   std::cout << "Max log likelihood = " << m_mlLogLikelihood << std::endl
@@ -244,7 +247,7 @@ void Analyzer::RefineEstimate(unsigned& iterator)
 
   // We first need to calculate our derivatives
   // As h --> 0...
-  const float h = 0.001;
+  const float h = 0.0001;
 
   // dl/dx
   double l1   = ComputeLogLikelihood(m_mlX+h, m_mlY, m_mlN0);
@@ -300,47 +303,38 @@ void Analyzer::RefineEstimate(unsigned& iterator)
   auto m = inverseFisherMatrix*lPVector;
 
   // Our convention --> x, y
-  float newGuessX     = m_mlX  - m[0][0];
-  float newGuessY     = m_mlY  - m[1][0];
+  float newGuessX     = m_oldGuessX - m[0][0];
+  float newGuessY     = m_oldGuessY - m[1][0];
   float newGuessR(0), newGuessT(0);
   ConvertToPolar(newGuessR, newGuessT, newGuessX, newGuessY);
   
   // Make sure r is not > disk radius
-  if (newGuessR >= m_diskRadius) { std::cout << "Caution: Estimate went out of bounds!\n"; return; }
+  if (newGuessR >= m_diskRadius) { std::cout << "\n!!!!Caution: Estimate went out of bounds!!!!\n"; return; }
   double newGuessMLogL = ComputeLogLikelihood(newGuessX, newGuessY, m_mlN0);
-
-  // Update
-  m_mlX             = newGuessX;
-  m_mlY             = newGuessY;
-  ConvertToPolar(m_mlRadius, m_mlTheta, m_mlX, m_mlY);
-  m_mlLogLikelihood = newGuessMLogL;
-
+ 
   // We want the eigenvalues and eigenvectors
   // Not sure why we're getting warnings here
   // These are symmetric matrices...
   // Nonetheless, this seems to be returning the correct values
   TVectorD eigenvalues(2);
-  fisherMatrix.Print();
-  inverseFisherMatrix.Print();
-  TMatrixD eigenvectors = inverseFisherMatrix.EigenVectors(eigenvalues);
-   
-  // Clear old memory
-  m_fisherEigenvalues.clear();
-  m_fisherEigenvectors.clear();
-  // Store eigenvalues
-  m_fisherEigenvalues.push_back(eigenvalues[0]);
-  m_fisherEigenvalues.push_back(eigenvalues[1]);
-  // Store eigenvectors
-  std::vector<float> e1 = {eigenvectors[0][0], eigenvectors[0][1]};
-  std::vector<float> e2 = {eigenvectors[1][0], eigenvectors[1][1]}; 
+  TMatrixD eigenvectors = inverseFisherMatrix.EigenVectors(eigenvalues); 
 
-  // Check the eigenvalues 
-  if (eigenvalues[0] < 0 && eigenvalues[1] < 0) 
+  // Check the eigenvalues and convergence 
+  if (//eigenvalues[0] < 0 && eigenvalues[1] < 0 &&
+      newGuessMLogL  < m_oldGuessMLogL) 
   { 
-    m_doCI = true; 
+    // Update
+    //m_mlX             = newGuessX;
+    //m_mlY             = newGuessY;
+    //ConvertToPolar(m_mlRadius, m_mlTheta, m_mlX, m_mlY);
+    //m_mlLogLikelihood = newGuessMLogL;
+    
     return; 
   }
   // Otherwise, keep searching
+  m_oldGuessX     = newGuessX;
+  m_oldGuessY     = newGuessY;
+  m_oldGuessMLogL = newGuessMLogL;
   RefineEstimate(iterator);
 }
 

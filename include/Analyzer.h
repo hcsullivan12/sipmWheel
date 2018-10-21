@@ -55,7 +55,7 @@ public:
   void  Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const unsigned& trigger);
   float ComputeLambda(const float& r, const float& theta, const unsigned& N0, const unsigned& m);
 
-  std::map<unsigned, unsigned> GetData()           const { return m_data; };
+  std::map<unsigned, unsigned> GetData() const { return m_data; };
   
 private:
 
@@ -63,49 +63,32 @@ private:
   std::pair<unsigned, unsigned> InitData(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const unsigned& trigger);
   double   ComputeLogLikelihood(const float& x, const float& y, const unsigned& N0);
   void     Handle(const unsigned& N0);
-  void     FillAccumulatorMap();
   void     InitVoxelList();
-  void     ComputeConfidenceIntervals();
   void     MakePlot();
   void     ConvertToPolar(float& r, float& thetaDeg, const float& x, const float& y);
-  void     FirstEstimate(const std::pair<unsigned, unsigned>& maxSiPM_counts);
   void     RefineEstimate(unsigned& iterator);
-  std::string JointCLFunc(const float& cl);
  
-  double                       m_mlLogLikelihood;
-  float                        m_mlN0;
-  float                        m_mlX;
-  float                        m_mlY;
-  float                        m_mlRadius;
-  float                        m_mlTheta;
-  float                        m_oldGuessX;  
-  float                        m_oldGuessY;  
-  float                        m_oldGuessN0;
-  double                       m_oldGuessMLogL;
-  float                        m_newGuessX;  
-  float                        m_newGuessY;
-  float                        m_newGuessN0;  
-  double                       m_newGuessMLogL;
-  float                        m_beta;
+  double                       m_mlLogLikelihood; //< Log likelihood for the MLE
+  float                        m_mlN0;            //< MLE for N0
+  float                        m_mlX;             //< MLE for x (cm)
+  float                        m_mlY;             //< MLE for y (cm)
+  float                        m_mlRadius;        //< MLE for r (cm)
+  float                        m_mlTheta;         //< MLE for theta (deg)
+
+  float                        m_oldGuessX;       //< old estimate for x in NR method
+  float                        m_oldGuessY;       //< old estimate for y in NR method
+  float                        m_oldGuessN0;      //< old estimate for N0 in NR method
+  double                       m_oldGuessMLogL;   //< old estimate for log likelihood in NR method
+
+  float                        m_beta;            
   float                        m_diskRadius;
-  float                        m_attenuationLength;
-  unsigned                     m_maxIterations;
-  unsigned                     m_nSiPMs;
-  unsigned                     m_nVoxels;
-  std::list<Voxel>             m_voxelList;
-  std::map<float, float>       m_deltaX;
-  std::map<float, float>       m_deltaY;
-  std::map<unsigned, unsigned> m_data;  
-  std::string                  m_recoOutputFile;
-  std::vector<float>           m_fisherEigenvalues;
-  std::vector<std::vector<float>> m_fisherEigenvectors;
-  std::vector<float>           m_sigmaInverse;
-  float                        m_sigmaXDiag;
-  float                        m_sigmaYDiag;
-  float                        m_sigmaX;
-  float                        m_sigmaY;
-  float                        m_correlation;
-  bool                         m_doCI;
+  float                        m_attenuationLength;  //< input attenuation length
+  unsigned                     m_maxIterations;      //< maximum number of iterations for NR method
+  unsigned                     m_nSiPMs;             //< number of sipms 
+  unsigned                     m_nVoxels;            //< number of voxels used to segment disk
+  std::list<Voxel>             m_voxelList;          //< list of created voxels
+  std::map<unsigned, unsigned> m_data;               //< measured counts (sipm, np.e.)
+  std::string                  m_recoOutputFile;     //< output file for plots
 };
 }
 
