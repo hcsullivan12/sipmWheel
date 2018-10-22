@@ -14,6 +14,7 @@
 #include "TGraph.h"
 #include "TFile.h"
 #include "TCanvas.h"
+#include <numeric>
 
 namespace wheel {
 
@@ -146,7 +147,6 @@ void WaveformAlg::FindHits(std::vector<float>   waveform,
 			hitCandidate.stopTick      = stopTick;
       hitCandidate.startTickAmp  = waveform[startTick];
       hitCandidate.stopTickAmp   = waveform[stopTick];
-			hitCandidate.hitBase       = hitLeadThreshold;
 			hitCandidate.hitPeakTick   = maxTick;
 			hitCandidate.hitPeak       = maxValue;
 			hitCandidate.hitAmplitude  = maxValue - hitLeadThreshold;
@@ -298,8 +298,8 @@ void WaveformAlg::FindHitCandidates(std::vector<float>::const_iterator startItr,
         firstItr-=configOffset;
       }
 
-      float min     = *firstItr;
-      int firstTime = std::distance(startItr,firstItr);
+      float startTickAmp = *firstItr;
+      int firstTime      = std::distance(startItr,firstItr);
 
       // Recursive call to find all candidate hits earlier than this peak
       FindHitCandidates(startItr, firstItr + 1, noiseParameters, bias, roiStartTick, hitCandVec, config);
@@ -314,17 +314,23 @@ void WaveformAlg::FindHitCandidates(std::vector<float>::const_iterator startItr,
         lastItr+=configOffset;
       }
 
-      int lastTime = std::distance(startItr,lastItr);
+      float stopTickAmp = *lastItr;
+      int lastTime      = std::distance(startItr,lastItr);
+
+      // Integrate the pulse
+      float sumADC = std::accumulate(firstItr, lastItr, 0.);
 
       // Now save this candidate's start and max time info
       HitCandidate hitCandidate;
       hitCandidate.startTick     = roiStartTick + firstTime;
+      hitCandidate.startTickAmp  = startTickAmp;
       hitCandidate.stopTick      = roiStartTick + lastTime;
-      hitCandidate.hitBase       = min;
+      hitCandidate.stopTickAmp   = stopTickAmp;
       hitCandidate.hitPeakTick   = roiStartTick + maxTime;
       hitCandidate.hitPeak       = maxValue;
-      hitCandidate.hitAmplitude  = maxValue - min;
+      hitCandidate.hitAmplitude  = maxValue - startTickAmp;
       hitCandidate.bias          = bias;
+      hitCandidate.hitIntegral   = sumADC;
 
       hitCandVec.push_back(hitCandidate);
 
@@ -402,7 +408,9 @@ std::vector<float> WaveformAlg::ComputeNoise(std::vector<float>& signal, const C
   TF1 fint("fint", "TMath::Abs(0-line)", gauss.GetParameter(1), max);
 
   float baselineInter = fint.GetMinimumX();
-  std::vector<float> vec = {gauss.GetParameter(1), gauss.GetParameter(2), baselineInter};
+  float p1 = gauss.GetParameter(1);
+  float p2 = gauss.GetParameter(2);
+  std::vector<float> vec = {p1, p2, baselineInter};
   return vec;
 }
 

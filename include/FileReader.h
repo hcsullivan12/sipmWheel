@@ -45,7 +45,7 @@ public:
  
   std::vector<TGraph>&  GetRawGraphs()  { return rawWaveforms; }
   std::vector<TGraph>&  GetModGraphs()  { return modWaveforms; }
-  wheel::MarkerPairVec& GetMarkers()    { return markers; }
+  wheel::MarkerListVec& GetMarkers()    { return markers; }
   
 private:
 
@@ -54,7 +54,7 @@ private:
 
   std::vector<TGraph>  rawWaveforms;
   std::vector<TGraph>  modWaveforms;
-  MarkerPairVec        markers; 
+  MarkerListVec        markers; 
 
 };
 }
