@@ -167,43 +167,6 @@ void WaveformAlg::FindHits(std::vector<float>   waveform,
   }      
 }
 
-/*void WaveformAlg::ApplyFits(HitCandidateVec& hitCandVecFits, const MergeHitCandidateVec& mergedHitsVec)
-{
-  for (const auto& mergedHits : mergedHitsVec) ApplyFits(hitCandVecFits, mergedHits);
-}
-
-void WaveformAlg::ApplyFits(HitCandidateVec& hitCandVecFits, const HitCandidateVec& hitCandidateVec)
-{
-  if (hitCandidateVec.size() > 1) return;
-
-  // Build the fit formula
-  std::string equation = "[0]*( 1 - TMath::Exp(-x/[1]) )";
-    
-  for(size_t idx = 1; idx < hitCandidateVec.size(); idx++) equation += "+expo(" + std::to_string(2*idx) + ")";
-  // Now define the complete function to fit
-  TF1 Expo("Expo",equation.c_str(),0,roiSize);
-    
-  // Setting the parameters for the fit
-  int parIdx(0);
-  for(auto& candidateHit : hitCandidateVec)
-  {
-    double peakMean   = candidateHit.hitCenter - float(startTime);
-    double peakWidth  = candidateHit.hitSigma;
-    double amplitude  = candidateHit.hitHeight;
-    double meanLowLim = std::max(peakMean - fPeakRange * peakWidth,              0.);
-    double meanHiLim  = std::min(peakMean + fPeakRange * peakWidth, double(roiSize));
-        
-    Gaus.SetParameter(  parIdx, amplitude);
-    Gaus.SetParameter(1+parIdx, peakMean);
-    Gaus.SetParameter(2+parIdx, peakWidth);
-    Gaus.SetParLimits(  parIdx, 0.1 * amplitude,  fAmpRange * amplitude);
-    Gaus.SetParLimits(1+parIdx, meanLowLim,       meanHiLim);
-    Gaus.SetParLimits(2+parIdx, std::max(fMinWidth, 0.1 * peakWidth), fMaxWidthMult * peakWidth);
-        
-    parIdx += 3;
-  }
-}*/
-
 bool WaveformAlg::GoodFit(const std::vector<float>& waveform, 
                           const int& maxTick, 
                           const float& maxValue,

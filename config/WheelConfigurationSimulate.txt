@@ -1,0 +1,9 @@
+process=simulate
+simulateOutputPath=/home/hunter/projects/wheel/output/recoOutput.root
+nSiPMs=4
+diskRadius=5.7
+diskThickness=2.0
+sourcePosition=5.7,0.0
+tpbEmissionPeak=420
+indexRefractionDisk=1.4
+indexRefractionMedium=1.3

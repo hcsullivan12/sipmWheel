@@ -89,14 +89,13 @@ void OutputConfigInfo(wheel::Configuration& config)
             << "PathToData          " << config.pathToData                     << std::endl
             << "SaveRawWaveforms    " << config.saveRawWaveforms               << std::endl
             << "SaveModWaveforms    " << config.saveModWaveforms               << std::endl
-            << "RawWaveformsFile    " << config.rawWaveformPath                << std::endl
-            << "ModWaveformsFile    " << config.modWaveformPath                << std::endl
-            << "RecoOutputFile      " << config.recoOutputFile                 << std::endl
+            << "RawWaveformsPath    " << config.rawWaveformPath                << std::endl
+            << "ModWaveformsPath    " << config.modWaveformPath                << std::endl
+            << "RecoOutputPath      " << config.recoOutputPath                 << std::endl
             << "BaselineSubtract    " << config.baselineSubtract               << std::endl
             << "SmoothWaveform      " << config.smoothWaveform                 << std::endl
             << "SMARange            " << config.smaRange                       << std::endl
             << "WaveformResolution  " << config.resolution                     << std::endl
-            << "HitSigmaThreshold   " << config.hitSigma                       << std::endl
             << "HitFinderSearch     " << config.hitFinderSearch                << std::endl
             << "MinimumHitAmp       " << config.minimumHitAmp                  << std::endl
             << "NumerOfSiPMs        " << config.nSiPMs                         << std::endl
@@ -106,9 +105,6 @@ void OutputConfigInfo(wheel::Configuration& config)
                                                                                 std::cout << std::endl; std::cout  
             << "Breakdowns          ";for(const auto& sipm : config.breakdowns) std::cout << sipm.second << "  ";
                                                                                 std::cout << std::endl; std::cout 
-            << "ThetaBinSize        " << config.thetaBinSize                   << std::endl
-            << "RadiusBinSize       " << config.radiusBinSize                  << std::endl
-            << "AttenLengthBinSize  " << config.attenuationLengthBinSize       << std::endl
             << "nVoxels             " << config.nVoxels                        << std::endl
             << "maxIterations       " << config.maxIterations                  << std::endl
             << "AttenuationLength   " << config.attenuationLength              << std::endl
@@ -119,17 +115,16 @@ void OutputConfigInfo(wheel::Configuration& config)
   }
   std::cout << "Process             " << config.process                        << std::endl
             << "PathToData          " << config.pathToData                     << std::endl
-            << "OutputFile          " << config.characterizeOutputFile         << std::endl
+            << "OutputPath          " << config.characterizeOutputPath         << std::endl
             << "NFiles/SiPM         " << config.nFilesCharacterize             << std::endl
             << "SaveRawWaveforms    " << config.saveRawWaveforms               << std::endl
             << "SaveModWaveforms    " << config.saveModWaveforms               << std::endl
-            << "RawWaveformsFile    " << config.rawWaveformPath                << std::endl
-            << "ModWaveformsFile    " << config.modWaveformPath                << std::endl
+            << "RawWaveformsPath    " << config.rawWaveformPath                << std::endl
+            << "ModWaveformsPath    " << config.modWaveformPath                << std::endl
             << "BaselineSubtract    " << config.baselineSubtract               << std::endl
             << "SmoothWaveform      " << config.smoothWaveform                 << std::endl
             << "SMARange            " << config.smaRange                       << std::endl
             << "WaveformResolution  " << config.resolution                     << std::endl
-            << "HitSigmaThreshold   " << config.hitSigma                       << std::endl
             << "HitFinderSearch     " << config.hitFinderSearch                << std::endl
             << "MinimumHitAmp       " << config.minimumHitAmp                  << std::endl
             << "NumerOfSiPMs        " << config.nSiPMs                         << std::endl
@@ -257,7 +252,7 @@ void ReadConfigFile(wheel::Configuration& config)
     if      (header == "pathToData")              config.pathToData      = value;
     else if (header == "rawWaveformPath")         config.rawWaveformPath = value;
     else if (header == "modWaveformPath")         config.modWaveformPath = value;
-    else if (header == "recoOutputFile")          config.recoOutputFile  = value;
+    else if (header == "recoOutputPath")          config.recoOutputPath  = value;
     else if (header == "printFiles")              value == "true" ? config.printFiles       = true : config.printFiles       = false;
     else if (header == "baselineSubtract")        value == "true" ? config.baselineSubtract = true : config.baselineSubtract = false;
     else if (header == "saveRawWaveforms")        value == "true" ? config.saveRawWaveforms = true : config.saveRawWaveforms = false;
@@ -267,21 +262,17 @@ void ReadConfigFile(wheel::Configuration& config)
     else if (header == "smaRange")                config.smaRange        = std::stoi(value);
     else if (header == "hitFinderSearch")         config.hitFinderSearch = std::stoi(value);
     else if (header == "resolution")              config.resolution      = std::stoi(value);
-    else if (header == "hitSigma")                config.hitSigma        = std::stof(value);
     else if (header == "minimumHitAmp")           config.minimumHitAmp   = std::stof(value);
     else if (header == "process")                 value == "characterize" ? config.process  = "characterize" : config.process = "reco"; // default to reco
     else if (header == "characterizeAmpThr")      config.characterizeAmpThr      = std::stof(value);
     else if (header == "characterizeAmpSig")      config.characterizeAmpSig      = std::stof(value);
     else if (header == "characterizeAmpFitRange") config.characterizeAmpFitRange = std::stof(value);
-    else if (header == "characterizeOutputFile")  config.characterizeOutputFile  = value;
+    else if (header == "characterizeOutputPath")  config.characterizeOutputPath  = value;
     else if (header == "nFilesCharacterize")      config.nFilesCharacterize      = std::stoi(value);
     else if (header == "nBiases")                 config.nBiases                 = std::stoi(value);
     else if (header == "biases")                  RecordBiases(config, value); 
     else if (header == "gains")                   RecordGains(config.gains, config, value);
     else if (header == "breakdowns")              RecordGains(config.breakdowns, config, value);
-    else if (header == "thetaBinSize")            config.thetaBinSize  = std::stof(value);
-    else if (header == "radiusBinSize")           config.radiusBinSize = std::stof(value);
-    else if (header == "attenuationLengthBinSize") config.attenuationLengthBinSize = std::stof(value);
     else if (header == "diskRadius")              config.diskRadius = std::stof(value);
     else if (header == "attenuationLength")       config.attenuationLength = std::stof(value); 
     else if (header == "nVoxels")                 config.nVoxels    = std::stoi(value);

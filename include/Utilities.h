@@ -58,39 +58,48 @@ using MarkerListVec        = std::vector<std::list<TMarker>>;
 
 struct Configuration 
 {
-  std::string      pathToData;                         ///< Path to csv data files
-  std::string      rawWaveformPath;                    ///< Output path for raw waveforms
-  std::string      modWaveformPath;                    ///< Output path for modified waveforms
-  std::string      pathToConfig;                       ///< Path to configuration file
-  std::string      recoOutputFile;                     ///< Output path for reconstruction results
-  bool             printFiles;                         ///< Option to print out data files
-  bool             baselineSubtract;                   ///< Option to baseline subtract
-  bool             saveRawWaveforms;                   ///< Option to save raw waveforms
-  bool             saveModWaveforms;                   ///< Option to save modified waveforms
-  unsigned         nSiPMs;                             ///< Number of sipms 
-  bool             smoothWaveform;                     ///< Option to perform a running average
-  unsigned         smaRange;                           ///< Range around center for applying average on waveform
-  unsigned         resolution;                         ///< Resolution to keep on waveform
-  float            hitSigma;                           ///< 
-  unsigned         hitFinderSearch;                    
-  float            minimumHitAmp;                      ///< Hit threshold
-  std::string      process;                            ///< Process: Reconstruction or characterization
-  float            characterizeAmpThr;
-  float            characterizeAmpSig;
-  float            characterizeAmpFitRange;
-  std::string      characterizeOutputFile;
-  unsigned         nFilesCharacterize;                 ///< Number of files to use from data
+  // Name of the process
+  std::string               process;                   ///< Process: Reconstruction or characterization
+  // File handling information
+  std::string               pathToData;                ///< Path to csv data files
+  std::string               rawWaveformPath;           ///< Output path for raw waveforms
+  std::string               modWaveformPath;           ///< Output path for modified waveforms
+  std::string               pathToConfig;              ///< Path to configuration file
+  std::string               recoOutputPath;            ///< Output path for reconstruction results
+  std::string               characterizeOutputPath;    ///< Output path for characterization results
+  std::string               simulateOutputPath;        ///< Output path for simulation results
+  // Output options and signal processing
+  bool                      printFiles;                ///< Option to print out data files
+  bool                      baselineSubtract;          ///< Option to baseline subtract
+  bool                      saveRawWaveforms;          ///< Option to save raw waveforms
+  bool                      saveModWaveforms;          ///< Option to save modified waveforms
+  bool                      smoothWaveform;            ///< Option to perform a running average
+  unsigned                  smaRange;                  ///< Range around center for applying average on waveform
+  unsigned                  resolution;                ///< Resolution to keep on waveform
+  unsigned                  hitFinderSearch;           ///< Number of samples to skip in hit finding
+  float                     minimumHitAmp;             ///< Hit threshold
+  // Reconstruction parameters
+  unsigned                  nVoxels;                   ///< Number of voxels to segment the disk geometry (=NxN)
+  unsigned                  maxIterations;             ///< Max number of iterations for NR correction
+  // Characterization parameters
+  float                     characterizeAmpThr;        ///< Threshold for peak fitting
+  float                     characterizeAmpSig;        ///< Spread for peak finding
+  float                     characterizeAmpFitRange;   ///< Spread for fitting
+  unsigned                  nFilesCharacterize;        ///< Number of files to use from data
+  // Disk and sipm information
   unsigned                  nBiases;                   ///< Number of biases used
   std::set<float>           biases;                    ///< The bias values (in V)
   std::map<unsigned, float> gains;                     ///< SiPM gains (in mV/p.e./O.V.)
   std::map<unsigned, float> breakdowns;                ///< SiPM breakdowns (in V)
-  float                     thetaBinSize;              
-  float                     radiusBinSize;
-  float                     attenuationLengthBinSize;
-  float                     diskRadius;                ///< Disk radius for reconstruction (in cm)
+  float                     diskRadius;                ///< Disk radius (in cm)
+  float                     diskThickness;             ///< Thickness of the disk (in cm)
+  unsigned                  nSiPMs;                    ///< Number of sipms 
   float                     attenuationLength;         ///< Attenuation length for disk (in cm)
-  unsigned                  nVoxels;                   ///< Number of voxels to segment the disk geometry (=NxN)
-  unsigned                  maxIterations;
+  // Simulation information
+  std::vector<float>        sourcePosition;            ///< Light source position. radius from center and theta measured counterclockwise from sipm1 (cm, deg)
+  float                     tpbEmissionPeak;           ///< TPB emission peak wavelength (nm)
+  float                     indexRefractionDisk;       ///< Index of refraction for the disk
+  float                     indexRefractionMedium;     ///< Index of refraction for the sorrounding medium
 };
 }
 

@@ -59,7 +59,7 @@ void Analyzer::Initialize(const Configuration& config)
   m_nSiPMs            = config.nSiPMs;
   m_mlLogLikelihood   = std::numeric_limits<double>::lowest();
   m_mlRadius = 0; m_mlTheta = 0; m_mlN0 = 0; 
-  m_recoOutputFile    = config.recoOutputFile;
+  m_recoOutputPath    = config.recoOutputPath;
   m_data.clear();
   // Create the voxels
   InitVoxelList();
@@ -374,7 +374,7 @@ std::pair<unsigned, unsigned> Analyzer::InitData(SiPMToTriggerMap& sipmToTrigger
 
 void Analyzer::MakePlot(const unsigned& trigger)
 {
-  TFile f(m_recoOutputFile.c_str(), "UPDATE");
+  TFile f(m_recoOutputPath.c_str(), "UPDATE");
 
   // Likelihood distribution for m_mlN0
   TH2D likelihoodDist("likelihoodDist", "Likelihood Distribution", std::sqrt(m_nVoxels), -m_diskRadius, m_diskRadius, std::sqrt(m_nVoxels), -m_diskRadius, m_diskRadius); 
