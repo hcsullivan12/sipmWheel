@@ -19,52 +19,31 @@ Characterizer::~Characterizer()
 {}
 
 void Characterizer::Characterize(SiPMInfoMap& sipmInfoMap, const SiPMToTriggerMap& sipmToTriggerMap, const Configuration& config)
-{
-  /*// Canvases for out histos
-  TCanvas masterAmpDist("masterAmpDist",  "All Amplitude Distributions", 1000, 1000);
-  TCanvas masterGainPlot("masterGainPlot", "All Gains", 1000, 1000);
-  
-  // Divide the canvases
-  masterAmpDist.Divide(config.nBiases,config.nSiPMs);
-  masterGainPlot.Divide(config.nBiases,config.nSiPMs);*/
-  
+{  
   // Loop over the sipms and biases
   unsigned ampCounter(1);
   unsigned gainCounter(1);
   SiPMGains sipmGains;
+  // There should only be one sipm here 
   for (const auto& sipm : sipmToTriggerMap)
   {
     // Make the amplitude distributions
-    //std::vector<TH1D> ampDists;
-    MakeHistograms(sipm.first, sipm.second, config);
-    /*// Now draw them
-    for (auto& ampDist : ampDists)
-    {
-      masterAmpDist.cd(ampCounter);
-      gStyle->SetOptStat(0);
-      ampDist.Draw("apl");
-      ampCounter++;
-    }*/
-
+    MakeHistograms(sipm.first, sipm.second, config); 
     // Make the gain plot for each amplitude distribution
     // Reserve the space
     std::vector<TGraphErrors> g;
     g.reserve(ampDists.find(sipm.first)->second.size());
     ampPeaks.emplace(sipm.first, g);
+    unsigned biasCounter = 0;
+    // Add the gain plot
     for (auto& ampDist : ampDists.find(sipm.first)->second)
     {
-      ampPeaks.find(sipm.first)->second.emplace_back(FitGain(ampDist, sipm.first, sipmGains, config));
-      /*masterGainPlot.cd(gainCounter);
-      ampPeaks.SetMarkerStyle(20);
-      ampPeaks.SetMarkerColor(1);
-      ampPeaks.Draw("AP");
-      gainCounter++;
-      ampPeaks.GetXaxis()->SetLimits(0, 5);
-      ampPeaks.SetMinimum(0);*/
+      ampPeaks.find(sipm.first)->second.emplace_back(FitGain(ampDist, sipm.first, sipmGains, biasCounter, config));
+      biasCounter++;
     }
   }
-  
-  // Finally finished the large canvases 
+  // Ignore this for now
+  return;
 
   // Now the breakdown plots
   TCanvas bdPlots("SiPM Breakdowns", "SiPM Breakdowns", 800, 800);
@@ -91,7 +70,7 @@ void Characterizer::Characterize(SiPMInfoMap& sipmInfoMap, const SiPMToTriggerMa
     g1.SetMaximum( 1.1*(*std::max_element(gains.begin(), gains.end())) );
     g1.SetMarkerStyle(20);
     g1.SetMarkerSize(2);
-    g1.Draw("AP");
+    //g1.Draw("AP");
 
     // Fit for bias plot
     TF1 fit1("fit1", "[0] + [1]*x", *std::min_element(biases.begin(), biases.end()), *std::max_element(biases.begin(), biases.end()));
@@ -121,7 +100,7 @@ void Characterizer::Characterize(SiPMInfoMap& sipmInfoMap, const SiPMToTriggerMa
     g2.SetMaximum(4);
     g2.SetMarkerStyle(24);
     g2.SetMarkerSize(2);
-    g2.Draw("AP");
+    //g2.Draw("AP");
 
     ///Fit for overvoltage plot
     TF1 fit2("fit2", "[0] + [1]*x", 0, 4);
@@ -132,7 +111,7 @@ void Characterizer::Characterize(SiPMInfoMap& sipmInfoMap, const SiPMToTriggerMa
 
     //std::cout << fit2->GetParError(0) << "   " << fit2->GetParError(1) <<  std::endl;
     //for (unsigned i = 0; i < nFiles; i++) std::cout << "Gain " << i + 1 << " = " << gains[i] << std::endl;
-    std::cout << "Gain is... " << std::setprecision(3) << fit2.GetParameter(1) << " mV/p.e./O.V.\n\n";
+    std::cout << "Gain is... " << std::setprecision(3) << fit2.GetParameter(1) << " mV/p.e./O.V.\n";
 
    /* ///Place the quantities on plot
     std::string bd = std::to_string(breakdown);
@@ -174,7 +153,7 @@ void Characterizer::MakeHistograms(const unsigned& sipm, const std::vector<HitCa
     std::string name = "SiPM " + std::to_string(sipm) + " at " + std::to_string(bias) + " V";
     // We will rebin
     TH1D h(name.c_str(), name.c_str(), 1, 0, 1);
-    h.GetXaxis()->SetTitle("Amplitude/Volts");
+    h.GetXaxis()->SetTitle("Integral/a.u.");
     ampDists.find(sipm)->second.emplace_back(h);
   }
   // Create a container for min and max
@@ -187,19 +166,17 @@ void Characterizer::MakeHistograms(const unsigned& sipm, const std::vector<HitCa
     {
       // Get bias index for this hit 
       const unsigned index = std::distance(config.biases.begin(), config.biases.find(hit.bias));
-      if (hit.hitHeight < xMin[index]) xMin[index] = hit.hitHeight;
-      if (hit.hitHeight > xMax[index]) xMax[index] = hit.hitHeight;
+      if (hit.hitIntegral < xMin[index]) xMin[index] = hit.hitIntegral;
+      if (hit.hitIntegral > xMax[index]) xMax[index] = hit.hitIntegral;
     }
   }
-
   // Now reset the binning
   unsigned index = 0;
   for (auto& dist : ampDists.find(sipm)->second)
   {
-    dist.SetBins(1000, xMin[index], xMax[index]);
+    dist.SetBins(100, 0, 100);
     index++;
   }
-
   // Loop over the hits to fill histos
   for (const auto& hitVec : vecOfHitCandVec)
   {
@@ -208,72 +185,45 @@ void Characterizer::MakeHistograms(const unsigned& sipm, const std::vector<HitCa
       // Get bias for this hit and get the hist that matches this
       const unsigned index = std::distance(config.biases.begin(), config.biases.find(hit.bias));
       auto& dist = ampDists.find(sipm)->second[index];
-      dist.Fill(hit.hitHeight);
+      dist.Fill(hit.hitIntegral);
     }
   }
 }
 
-TGraphErrors Characterizer::FitGain(TH1D& hs, const unsigned& sipm, SiPMGains& sipmGains, const Configuration& config)
+TGraphErrors Characterizer::FitGain(TH1D& hs, const unsigned& sipm, SiPMGains& sipmGains, const unsigned& nBias, const Configuration& config)
 {
   Float_t gain=0;
   TSpectrum s(3);
-  //float threshold = ampThreshold;
 
   Int_t nfound = s.Search(&hs, config.characterizeAmpSig, "", config.characterizeAmpThr);
   Int_t npeaks = s.GetNPeaks();
   printf("Found %d peaks to fit\n",npeaks);
 
-  //Double_t peaks;
-  //Double_t altpeaks;
+  // Get the peaks 
   auto peaks = s.GetPositionX();
 
-  Double_t x[npeaks], ex[npeaks];
-  Double_t y[npeaks], ey[npeaks];
-
+  Double_t y[npeaks],  ey[npeaks];
   Double_t gx[npeaks], gex[npeaks];
   Double_t gy[npeaks], gey[npeaks];
-
-  //Sort peaks
-  double temp;
-  int nchanges=0;
-  do 
-  {
-    nchanges=0;
-    for(int p = 0; p < nfound - 1; p++) 
-    {
-      if(peaks[p] > peaks[p+1]) 
-      {
-        temp=peaks[p];
-        peaks[p]=peaks[p+1];
-        peaks[p+1]=temp;
-        nchanges++;
-      }
-    }
-  } while(nchanges != 0);
-
-  for (int j = 0; j < npeaks; j++) 
-  {
-    x[j] =j+1;
-    y[j]=peaks[j];
-  }
-
-  int point = 1;
-  //double fitRange = ampFitRange;
  
-  for (int g = 0; g < npeaks; g++) 
+  // Print out the peaks found and store into a vec
+  std::vector<Double_t> peaksVec(npeaks, 0);
+  for (int p = 0; p < npeaks; p++) { std::cout << "Found peak at " << peaks[p] << "\n"; peaksVec[p] = peaks[p]; }
+  std::sort(peaksVec.begin(), peaksVec.end(), [](const Double_t& left, const Double_t& right){return left < right;});
+ 
+  for (int peak = 0; peak < npeaks; peak++) 
   {
-    TF1 gfit("gfit", "gaus", y[g] - config.characterizeAmpFitRange/2, y[g] + config.characterizeAmpFitRange/2);
-    hs.Fit(&gfit,"QR+");
-    
-    gx[point - 1]  = point;
-    gy[point - 1]  = gfit.GetParameter(1);  //Mean
-    gey[point - 1] = gfit.GetParError(1);
-    point++;
+    TF1 gfit("gfit", "gaus", peaksVec[peak] - config.characterizeAmpFitRange/2, peaksVec[peak] + config.characterizeAmpFitRange/2);
+    hs.Fit(&gfit,"QR+");    
+    gx[peak]  = peak + 1;
+    gy[peak]  = gfit.GetParameter(1);  //Mean
+    gey[peak] = gfit.GetParError(1);
   }
 
   TGraphErrors grpeaks(npeaks,gx,gy,0,gey);
-  grpeaks.SetTitle("SiPM Gain from Amplitude Distribution");
-  grpeaks.GetYaxis()->SetTitle("Amplitude/Volts");
+  std::string name = "SiPM " + std::to_string(sipm) + " Gain from " + std::to_string(*std::next(config.biases.begin(), nBias));
+  grpeaks.SetTitle(name.c_str());
+  grpeaks.GetYaxis()->SetTitle("Area/a.u.");
   
   grpeaks.GetYaxis()->SetTitleOffset(1.4);
   grpeaks.GetXaxis()->SetTitle("Peak N");

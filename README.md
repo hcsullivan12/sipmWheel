@@ -21,7 +21,7 @@ ls data/sipm1
 The algorithm will then read from each file in these directories. Make sure to list characterization under "process" in config. 
 
 ## Reconstruction
-Reconstruction takes all the hits from each sipm for a specific event and performs a maximum likelihood estimate for the light position, disk attenuation length, and original light yield. Results are output to the recoOutputFile in config. You must also list "reconstruction" as the process and the sipm gains and biases in config. Create a data directory with subdirectories for each sipm and one subsubdirectory for the bias. 
+Reconstruction takes all the hits from each sipm for a specific event and performs a maximum likelihood estimate for the light position, disk attenuation length, and original light yield. Results are output to the recoOutputFile in config. You must also list "reconstruction" as the process and the sipm gains, bias, and breakdowns in config.  
 
 # Running the code
 Once the configuration has been set, run the following commands:
@@ -33,3 +33,5 @@ cmake ..
 make
 ./sipmwheel <path_to_config_file>
 ```
+
+Note: The characteriation and reconstruction plots are updated throughout the algorithm. So if you're starting a new run, make sure to delete it!
