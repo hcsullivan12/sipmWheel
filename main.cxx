@@ -31,7 +31,11 @@
 #include "FileReader.h"
 #include "Analyzer.h"
 #include "Characterizer.h"
-//#include "Reconstructor.h"
+
+// Preprocessing variables
+#ifdef VERSION
+  #define sipmWheelVersion VERSION
+#endif
 
 // Prototypes
 void PrintTheFiles(const wheel::SiPMToFilesMap& sipmToFilesMap);
@@ -79,6 +83,7 @@ void OutputConfigInfo(wheel::Configuration& config)
   // Hello there!
   std::cout << std::setfill('-') << std::setw(80) << "-" << std::setfill(' ')  << std::endl;
   std::cout << "     SiPM Wheel Characterization and Analysis Code      "      << std::endl;
+  std::cout << "                 Version: " << sipmWheelVersion                << std::endl;
   std::cout << "         Author: Hunter Sullivan (UT Arlington)         "      << std::endl;
   std::cout                                                                    << std::endl;
   std::cout << "SiPM Wheel Configuration:\n";
