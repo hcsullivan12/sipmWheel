@@ -50,9 +50,6 @@ void RecordBiases(wheel::Configuration& config, const std::string& value);
 void RecordGains(std::map<unsigned, float>& map, const wheel::Configuration& config, const std::string& value);
 void FillSiPMInfo(wheel::SiPMInfoMap& sipmInfoMap, const wheel::Configuration& config);
 void OutputConfigInfo(wheel::Configuration& config);
-void SaveCharacterizationPlots(std::map<unsigned, std::vector<TH1D>>         ampDists,
-                               std::map<unsigned, std::vector<TGraphErrors>> ampPeaks,
-                               const wheel::Configuration&                   config);
 
 int main(int argc, char **argv)
 {
@@ -96,6 +93,7 @@ void OutputConfigInfo(wheel::Configuration& config)
             << "ModWaveformsFile    " << config.modWaveformPath                << std::endl
             << "RecoOutputFile      " << config.recoOutputFile                 << std::endl
             << "BaselineSubtract    " << config.baselineSubtract               << std::endl
+            << "SmoothWaveform      " << config.smoothWaveform                 << std::endl
             << "SMARange            " << config.smaRange                       << std::endl
             << "WaveformResolution  " << config.resolution                     << std::endl
             << "HitSigmaThreshold   " << config.hitSigma                       << std::endl
@@ -128,6 +126,7 @@ void OutputConfigInfo(wheel::Configuration& config)
             << "RawWaveformsFile    " << config.rawWaveformPath                << std::endl
             << "ModWaveformsFile    " << config.modWaveformPath                << std::endl
             << "BaselineSubtract    " << config.baselineSubtract               << std::endl
+            << "SmoothWaveform      " << config.smoothWaveform                 << std::endl
             << "SMARange            " << config.smaRange                       << std::endl
             << "WaveformResolution  " << config.resolution                     << std::endl
             << "HitSigmaThreshold   " << config.hitSigma                       << std::endl
@@ -207,6 +206,7 @@ void Characterize(const wheel::Configuration& myConfig)
   std::cout << "Reading the files... " << std::endl;
   // Loop over the sipms
   wheel::Characterizer ch;
+  ch.Initialize(myConfig);
   for (auto& sipm : sipmToBiasTriggerMap)
   {
     wheel::SiPMToTriggerMap sipmToTriggerMap;
@@ -219,7 +219,7 @@ void Characterize(const wheel::Configuration& myConfig)
     ch.Characterize(sipmInfoMap, sipmToTriggerMap, myConfig);
   }
   // Save the plots
-  SaveCharacterizationPlots(ch.GetAmpDists(), ch.GetAmpPeaks(), myConfig);
+  ch.SaveCharacterizationPlots(myConfig);
 
   clock_t end = clock();
   double duration = ((double) (end - start)) / CLOCKS_PER_SEC;
@@ -263,6 +263,7 @@ void ReadConfigFile(wheel::Configuration& config)
     else if (header == "saveRawWaveforms")        value == "true" ? config.saveRawWaveforms = true : config.saveRawWaveforms = false;
     else if (header == "saveModWaveforms")        value == "true" ? config.saveModWaveforms = true : config.saveModWaveforms = false;
     else if (header == "nSiPMs")                  config.nSiPMs          = std::stoi(value);
+    else if (header == "smoothWaveform")          value == "true" ? config.smoothWaveform = true : config.smoothWaveform = false;
     else if (header == "smaRange")                config.smaRange        = std::stoi(value);
     else if (header == "hitFinderSearch")         config.hitFinderSearch = std::stoi(value);
     else if (header == "resolution")              config.resolution      = std::stoi(value);
@@ -419,57 +420,6 @@ void PrintTheFiles(const wheel::SiPMToBiasTriggerMap& map)
   }
 }
 
-void SaveCharacterizationPlots(std::map<unsigned, std::vector<TH1D>>         ampDists, 
-                               std::map<unsigned, std::vector<TGraphErrors>> ampPeaks, 
-                               const wheel::Configuration&                   config)
-{
-  // Canvases for out histos
-  TCanvas masterAmpDist("masterAmpDist",  "All Amplitude Distributions", 1000, 1000);
-  TCanvas masterGainPlot("masterGainPlot", "All Gains", 1000, 1000); 
-
-  // Divide the canvases
-  masterAmpDist.Divide(config.nBiases,config.nSiPMs);
-  masterGainPlot.Divide(config.nBiases,config.nSiPMs);
-
-  // Loop over sipms
-  unsigned ampCounter(1);
-  unsigned gainCounter(1);
-  for (unsigned sipm = 1; sipm <= config.nSiPMs; sipm++)
-  {
-    // Get the dists for this sipm
-    //std::vector<TH1D>& dists = ampDists.find(sipm)->second;
-    // Draw the amp dists and gain plot
-    for (auto& dist : ampDists.find(sipm)->second)
-    {
-      // Amplitude dist
-      masterAmpDist.cd(ampCounter);
-      gStyle->SetOptStat(0);
-      dist.GetXaxis()->SetTitle("Integral/a.u.");
-      dist.Draw();
-      masterAmpDist.Update();
-      dist.GetXaxis()->SetTitle("Area/a.u."); 
-      masterAmpDist.Modified();
-      ampCounter++;
-    }
-    for (auto& peaks : ampPeaks.find(sipm)->second)
-    {
-      // Gain
-      masterGainPlot.cd(gainCounter);
-      peaks.SetMarkerStyle(20);
-      peaks.SetMarkerColor(1);
-      peaks.Draw("AP");
-      gainCounter++;
-      peaks.GetXaxis()->SetLimits(0, 5);
-      peaks.SetMinimum(0);      
-    }
-  }
-
-  TFile f(config.characterizeOutputFile.c_str(), "RECREATE");
-  masterAmpDist.Write();
-  masterGainPlot.Write();
-  f.Close();
-};
-
 void SaveWaveforms(wheel::FileReader& fr, const wheel::Configuration& config)
 {
   // First output raw
@@ -506,11 +456,9 @@ void SaveWaveforms(wheel::FileReader& fr, const wheel::Configuration& config)
       //g->GetXaxis()->SetRangeUser(1900, 2100);
       //g->Fit(fits[counter], "R+", "", 1988, 2100);
       g.Draw("");
-      for (auto& m : fr.GetMarkers()[counter])
-      {
-        m.first.Draw("same");
-        m.second.Draw("same");
-      }
+      std::list<TMarker> ml = fr.GetMarkers()[counter];
+      for (auto& m : ml) m.Draw("same");
+      
       // Write this to file
       c.Write();
       counter++;

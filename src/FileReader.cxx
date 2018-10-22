@@ -47,7 +47,7 @@ void FileReader::ReadFiles(SiPMToTriggerMap&    sipmToTriggerMap,
     for (const auto& file : bias.second)
     {
       // Just to make sure we didnt get stuck
-      /*if (counter % 100 == 0)*/ std::cout << "Trigger #" << counter << std::endl;
+      if (counter % 100 == 0) std::cout << "Trigger #" << counter << std::endl;
       counter++;
       // Option to only do so many
       if (counter > config.nFilesCharacterize) break;
@@ -122,7 +122,7 @@ void FileReader::ReadFile(HitCandidateVec& hitCandidateVec, const std::string& f
     std::getline(file, yTemp, ',');
     counter++;
 
-    signal.push_back( atof(yTemp.c_str()) );
+    signal.push_back( -atof(yTemp.c_str()) );
   }
   
   // Analyze this waveform
@@ -157,7 +157,8 @@ void FileReader::Analyze(std::vector<float>&  signal,
   }
   // Smooth the waveform
   WaveformAlg waveformAlg; 
-  //waveformAlg.SmoothWaveform2(signal, config); 
+  if (config.smoothWaveform) waveformAlg.SmoothWaveform(signal, config); 
+
   // Let's do the hit finding now
   HitCandidateVec      hitCandVec;
   MergeHitCandidateVec mergedHitsVec;
@@ -181,7 +182,7 @@ void FileReader::Analyze(std::vector<float>&  signal,
     }
     modWaveforms.push_back(g);
   }
-  std::cout << "Found: " << hitCandVec.size() << " hits. " << std::endl;
+  //std::cout << "Found: " << hitCandVec.size() << " hits. " << std::endl;
   // Append
   hitCandidateVec.insert(hitCandidateVec.end(), hitCandVec.begin(), hitCandVec.end());
   // Make the markers for the graphs
@@ -195,17 +196,22 @@ void FileReader::Analyze(std::vector<float>&  signal,
 
 void FileReader::MakeTheMarkers(const HitCandidateVec& hitCandVec)
 {
-  std::vector<std::pair<TMarker,TMarker>> mks;
+  std::list<TMarker> mks;
   for (const auto& hit : hitCandVec)
   {
     //std::cout << "Hit start = " << hit.startTickAmp << "  hit stop = " << hit.stopTickAmp << std::endl;
     TMarker mMax(hit.stopTick, hit.stopTickAmp, 23);
     TMarker mMin(hit.startTick, hit.startTickAmp, 23);
+    TMarker mPeak(hit.hitPeakTick, hit.hitPeak, 23);
     mMax.SetMarkerColor(4);
     mMax.SetMarkerSize(1.5);
     mMin.SetMarkerColor(4);
     mMin.SetMarkerSize(1.5); 
-    mks.emplace_back(mMin, mMax);
+    mPeak.SetMarkerColor(2);
+    mPeak.SetMarkerSize(1.5);
+    mks.emplace_back(mMax);
+    mks.emplace_back(mMin);
+    mks.emplace_back(mPeak);
   } 
   markers.push_back(mks);
 }
