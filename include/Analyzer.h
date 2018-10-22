@@ -53,18 +53,16 @@ public:
   
   void  Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const Configuration& config, const unsigned& trigger);
   void  Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const unsigned& trigger);
-  float ComputeLambda(const float& r, const float& theta, const unsigned& N0, const unsigned& m);
-
-  std::map<unsigned, unsigned> GetData() const { return m_data; };
-  
+    
 private:
 
   void     Initialize(const Configuration& config);
   std::pair<unsigned, unsigned> InitData(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const unsigned& trigger);
   double   ComputeLogLikelihood(const float& x, const float& y, const unsigned& N0);
+  float    ComputeLambda(const float& r, const float& theta, const unsigned& N0, const unsigned& m);
   void     Handle(const unsigned& N0);
   void     InitVoxelList();
-  void     MakePlot();
+  void     MakePlot(const unsigned& trigger);
   void     ConvertToPolar(float& r, float& thetaDeg, const float& x, const float& y);
   void     RefineEstimate(unsigned& iterator);
  

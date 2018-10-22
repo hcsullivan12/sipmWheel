@@ -41,7 +41,7 @@ void Analyzer::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap
   // Start reconstruction
   Reconstruct(sipmToTriggerMap, sipmInfoMap, trigger);
   // Make a useful plot
-  MakePlot();
+  MakePlot(trigger);
 }
 
 void Analyzer::Initialize(const Configuration& config)
@@ -369,7 +369,7 @@ std::pair<unsigned, unsigned> Analyzer::InitData(SiPMToTriggerMap& sipmToTrigger
   return std::make_pair(maxSiPM, max);
 }
 
-void Analyzer::MakePlot()
+void Analyzer::MakePlot(const unsigned& trigger)
 {
   TFile f(m_recoOutputFile.c_str(), "UPDATE");
 
@@ -423,15 +423,60 @@ void Analyzer::MakePlot()
   xy.Draw("same");
 
   // Add our legend
-  TLegend leg(0.1,0.6,0.3,0.7); 
-  leg.AddEntry(&contour68, "68% CL", "l");
-  leg.AddEntry(&contour90, "90% CL", "l"); 
-  leg.AddEntry(&contour95, "95% CL", "l"); 
-  leg.AddEntry(&xy, "MLE Position", "p");
-  leg.Draw("same");
+  TLegend leg1(0.1,0.6,0.3,0.7); 
+  leg1.AddEntry(&contour68, "68% CL", "l");
+  leg1.AddEntry(&contour90, "90% CL", "l"); 
+  leg1.AddEntry(&contour95, "95% CL", "l"); 
+  leg1.AddEntry(&xy, "MLE Position", "p");
+  leg1.Draw("same");
 
   c1.Update();
   c1.Write();
+
+  // Make the comparison plot 
+  std::string name = "data_mle_trigger" + std::to_string(trigger);
+  TCanvas c2(name.c_str(), name.c_str(), 1000, 1000);
+  // Get the counts lambda_m using the mlestimates for r, theta, and N0
+  std::vector<unsigned> prediction;
+  prediction.reserve(m_nSiPMs);
+  for (int sipm = 1; sipm <= m_nSiPMs; sipm++) 
+  {
+    float lambda = ComputeLambda(m_mlRadius, m_mlTheta, m_mlN0, sipm); 
+    prediction[sipm - 1] = static_cast<unsigned>(lambda);
+  }
+
+  name = "pred_trigger" + std::to_string(trigger);
+  TH1D pred(name.c_str(), name.c_str(), m_nSiPMs, 0, m_nSiPMs); 
+  for (int posBin = 1; posBin <= m_nSiPMs; posBin++) pred.SetBinContent( posBin, prediction[posBin - 1] );
+  
+  pred.SetFillStyle(3001);
+  pred.SetFillColor(kRed);
+  pred.SetLineWidth(3);
+  pred.SetLineColor(kRed);
+  pred.GetXaxis()->SetTitle("SiPM Position");
+  pred.GetYaxis()->SetTitle("p.e");
+  pred.SetTitle("Estimator for SiPM Wheel");
+  gStyle->SetOptStat(0);
+  pred.SetMaximum(30);
+  pred.SetMinimum(0);
+  pred.Draw();
+
+  name = "dataHisto_trigger" + std::to_string(trigger);
+  TH1D dataHisto(name.c_str(), name.c_str(), m_nSiPMs, 0, m_nSiPMs);
+  std::cout << "\nBin comparison:\n";
+  for (int posBin = 1; posBin <= m_nSiPMs; posBin++) 
+  {
+    std::cout << "Data Bin " << posBin << " :  " << m_data.find(posBin)->second << " p.e." << "   Pred Bin " << posBin << " :  " << prediction[posBin - 1] << " p.e." << std::endl;
+    dataHisto.SetBinContent(posBin, m_data.find(posBin)->second);
+  }
+  dataHisto.SetMarkerStyle(21);
+  dataHisto.SetMarkerSize(2);
+  dataHisto.Draw("same P");
+
+  TLegend leg2(0.1,0.6,0.3,0.7);
+  leg2.AddEntry(&pred, "Estimator", "f");
+  leg2.AddEntry(&dataHisto, "Data", "p");
+
  
   f.Close();
 }
