@@ -86,6 +86,7 @@ private:
   unsigned                     m_nVoxels;            //< number of voxels used to segment disk
   std::list<Voxel>             m_voxelList;          //< list of created voxels
   std::map<unsigned, unsigned> m_data;               //< measured counts (sipm, np.e.)
+  unsigned                     m_maxCounts;          //< maximum number of p.e., used for plotting
   std::string                  m_recoOutputFile;     //< output file for plots
 };
 }

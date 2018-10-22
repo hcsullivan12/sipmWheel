@@ -366,6 +366,9 @@ std::pair<unsigned, unsigned> Analyzer::InitData(SiPMToTriggerMap& sipmToTrigger
     std::cout << "SiPM " << sipm.first << " --> " << sipmCounts << " p.e.\n";
   }
 
+  // For use later on
+  m_maxCounts = max;
+
   return std::make_pair(maxSiPM, max);
 }
 
@@ -402,7 +405,8 @@ void Analyzer::MakePlot(const unsigned& trigger)
   contour95.SetContour(1, level95);
 
   // Now draw the distribution and confidence regions
-  TCanvas c1("c1", "c1", 800, 800);
+  std::string name1 = "likelihood_CL_" + std::to_string(trigger);
+  TCanvas c1(name1.c_str(), name1.c_str(), 800, 800);
   gStyle->SetOptStat(0);
   likelihoodDist.Draw("colz");
 
@@ -431,22 +435,25 @@ void Analyzer::MakePlot(const unsigned& trigger)
   leg1.Draw("same");
 
   c1.Update();
-  c1.Write();
+  c1.Write(); 
 
   // Make the comparison plot 
-  std::string name = "data_mle_trigger" + std::to_string(trigger);
-  TCanvas c2(name.c_str(), name.c_str(), 1000, 1000);
+  std::string name2 = "data_mle_trigger" + std::to_string(trigger);
+  TCanvas c2(name2.c_str(), name2.c_str(), 1000, 1000);
   // Get the counts lambda_m using the mlestimates for r, theta, and N0
   std::vector<unsigned> prediction;
   prediction.reserve(m_nSiPMs);
+  // Maximum, used for plotting
+  float max(m_maxCounts);
   for (int sipm = 1; sipm <= m_nSiPMs; sipm++) 
   {
     float lambda = ComputeLambda(m_mlRadius, m_mlTheta, m_mlN0, sipm); 
     prediction[sipm - 1] = static_cast<unsigned>(lambda);
+    if (prediction[sipm - 1] > max) max = prediction[sipm - 1];
   }
 
-  name = "pred_trigger" + std::to_string(trigger);
-  TH1D pred(name.c_str(), name.c_str(), m_nSiPMs, 0, m_nSiPMs); 
+  name2 = "pred_trigger" + std::to_string(trigger);
+  TH1D pred(name2.c_str(), name2.c_str(), m_nSiPMs, 0, m_nSiPMs); 
   for (int posBin = 1; posBin <= m_nSiPMs; posBin++) pred.SetBinContent( posBin, prediction[posBin - 1] );
   
   pred.SetFillStyle(3001);
@@ -457,12 +464,12 @@ void Analyzer::MakePlot(const unsigned& trigger)
   pred.GetYaxis()->SetTitle("p.e");
   pred.SetTitle("Estimator for SiPM Wheel");
   gStyle->SetOptStat(0);
-  pred.SetMaximum(30);
+  pred.SetMaximum(max+1);
   pred.SetMinimum(0);
   pred.Draw();
 
-  name = "dataHisto_trigger" + std::to_string(trigger);
-  TH1D dataHisto(name.c_str(), name.c_str(), m_nSiPMs, 0, m_nSiPMs);
+  name2 = "dataHisto_trigger" + std::to_string(trigger);
+  TH1D dataHisto(name2.c_str(), name2.c_str(), m_nSiPMs, 0, m_nSiPMs);
   std::cout << "\nBin comparison:\n";
   for (int posBin = 1; posBin <= m_nSiPMs; posBin++) 
   {
@@ -477,6 +484,7 @@ void Analyzer::MakePlot(const unsigned& trigger)
   leg2.AddEntry(&pred, "Estimator", "f");
   leg2.AddEntry(&dataHisto, "Data", "p");
 
+  c2.Write();
  
   f.Close();
 }

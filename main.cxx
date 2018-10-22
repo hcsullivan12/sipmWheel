@@ -513,9 +513,3 @@ void SaveWaveforms(wheel::FileReader& fr, const wheel::Configuration& config)
   f.Close();
   }
 }
-
-Double_t disk(Double_t* x, Double_t* par)
-{
-  Double_t f = x[0]*x[0] + x[1]*x[1];
-  return f;
-}
