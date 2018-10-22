@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.5)
 project(sipmwheel)
 
+add_definitions(-DVERSION="v01_00_00")
+
 set(CMAKE_CXX_STANDARD 11)
 
 list(APPEND CMAKE_MODULE_PATH $ENV{ROOTSYS}/etc/cmake)

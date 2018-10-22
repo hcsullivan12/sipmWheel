@@ -1,0 +1,412 @@
+// Needed parameters...
+  /*// First derivative
+  float drdx    = x/r; 
+  float drdy    = y/r;
+  // Assuming y,x > 0
+  float dpdx    = y/xsec2theta; 
+  float dpdy    = -1/x;
+  float drbardx = 2*r*drdx - 2*m_diskRadius*cosp*drdx + 2*r*m_diskRadius*sinp*dpdx;
+  float drbardy = 2*r*drdy - 2*m_diskRadius*cosp*drdy + 2*r*m_diskRadius*sinp*dpdy;
+  float dcospdx = (1/(rbar*m_diskRadius))*( rbar*drbardx - r*drdx - m_diskRadius*cosp*drbardx );
+  float dcospdx = (1/(rbar*m_diskRadius))*( rbar*drbardx - r*drdx - m_diskRadius*cosp*drbardx );
+  
+  float dlambdadx = (N0*TMath::Exp(-rbar/m_attenuationLength)/rBar)*( dcospdx - cosp(1/m_attenuationLength + 1/rBar)*drbardx );
+  float dlambdady = (N0*TMath::Exp(-rbar/m_attenuationLength)/rBar)*( dcospdy - cosp(1/m_attenuationLength + 1/rBar)*drbardy );
+  
+  // Second derivative
+  float d2rdx = (r - x*drdx)/r*r;
+  float d2rdy = (r - y*drdy)/r*r;
+  // Assuming y,x > 0
+  
+  float d2rBardx = 2*drdx*drdx + 2*r*d2rdx + 2*R*sinp*dpdx*drdx - 2*R*cosp*d2rdx + 2*drdx*R*sinp*dpdx + 2*r*R*cosp*dpdx*dpdx + 2*r*R*sinp*d2pdx;
+  float d2rBardy = 2*drdy*drdy + 2*r*d2rdy + 2*R*sinp*dpdy*drdy - 2*R*cosp*d2rdy + 2*drdy*R*sinp*dpdy + 2*r*R*cosp*dpdy*dpdy + 2*r*R*sinp*d2pdy;
+
+  float d2*/
+
+/*void Analyzer::ComputeConfidenceIntervals()
+{
+  // Some notes:
+  //
+  // [x-, x+]  --> x +- c*1/sqrt(I)
+  //
+  // Here: c*1/sqrt(I) = m_delta.find(percent)->second
+  //
+  // c = 2.576 --> 99%
+  // c = 2.326 --> 98%
+  // c = 1.96  --> 95%
+  // c = 1.645 --> 90%
+  //
+  // Our equation is:
+  //
+  // I = sum_k [ (data[k]/lambda^2[k])(dlambda/dx)^2 - (1 - data[k]/lambda[k])(d^2lambda/dx2) ]
+  //
+  // Rememeber:
+  // 
+  // lambda ~ N0*cos(alpha)*Exp(-r/attenuationLength)/r
+  //
+ 
+  std::vector<float> sum(2,0);
+  for (unsigned sipm = 1; sipm <= m_nSiPMs; sipm++)
+  {
+    // Define the 2D lambda function to evaluate 1st and 2nd derivatives
+    // We need two of these to evaluate partials
+    // Be careful here, variable is always x!
+    std::string r_x              = "std::sqrt(x*x + "+std::to_string(m_mlX*m_mlX)+")";
+    std::string thetaDeg_x       = "( TMath::ACos("+std::to_string(m_mlX)+"/"+r_x+")*180/TMath::Pi() )";
+    std::string cosp_x           = "TMath::Cos( (("+std::to_string(sipm)+"-1)*"+std::to_string(m_beta)+" - "+thetaDeg_x+")*TMath::Pi()/180 )";
+    std::string rBar_x           = "std::sqrt("+r_x+"*"+r_x+" + "+std::to_string(m_diskRadius)+"*"+std::to_string(m_diskRadius)+" - 2*"+r_x+"*"+std::to_string(m_diskRadius)+"*"+cosp_x+")";
+    std::string cosAlpha_x       = "(("+rBar_x+"*"+rBar_x+" + "+std::to_string(m_diskRadius)+"*"+std::to_string(m_diskRadius)+" - "+r_x+"*"+r_x+")/(2*"+rBar_x+"*"+std::to_string(m_diskRadius)+"))";
+    std::string lambdaXConstEquation = std::to_string(m_mlN0)+"*"+cosAlpha_x+"*TMath::Exp(-"+rBar_x+"/"+std::to_string(m_attenuationLength)+")/"+rBar_x; 
+
+    std::cout << "r_x        = " << r_x        << "\n"
+              << "thetaDeg_x = " << thetaDeg_x << "\n"
+              << "cosp_x     = " << cosp_x     << "\n"
+              << "rBar_x     = " << rBar_x     << "\n"
+              << "cosAlpha_x = " << cosAlpha_x << "\n"
+              << "lambdaXC   = " << lambdaXConstEquation << "\n\n";
+
+    TF1 lambdaXConst("lambdaXConst", lambdaXConstEquation.c_str(), -m_diskRadius, m_diskRadius);
+   
+    std::string r_y            = "std::sqrt(x*x + "+std::to_string(m_mlY*m_mlY)+")";
+    std::string thetaDeg_y     = "TMath::ACos(x/"+r_y+")*180/TMath::Pi()";
+    std::string cosp_y         = "TMath::Cos( (("+std::to_string(sipm)+"-1)*"+std::to_string(m_beta)+" - "+thetaDeg_y+")*TMath::Pi()/180 )";
+    std::string rBar_y         = "std::sqrt("+r_y+"*"+r_y+" + "+std::to_string(m_diskRadius)+"*"+std::to_string(m_diskRadius)+" - 2*"+r_y+"*"+std::to_string(m_diskRadius)+"*"+cosp_y+")";
+    std::string cosAlpha_y     = "(("+rBar_y+"*"+rBar_y+" + "+std::to_string(m_diskRadius)+"*"+std::to_string(m_diskRadius)+" - "+r_y+"*"+r_y+")/(2*"+rBar_y+"*"+std::to_string(m_diskRadius)+"))";
+    std::string lambdaYConstEquation = std::to_string(m_mlN0)+"*"+cosAlpha_y+"*TMath::Exp(-"+rBar_y+"/"+std::to_string(m_attenuationLength)+")/"+rBar_y; 
+
+    TF1 lambdaYConst("lambdaYConst", lambdaYConstEquation.c_str(), -m_diskRadius, m_diskRadius);
+
+    // Derivatives
+    float dlambdadx   = lambdaYConst.Derivative(m_mlX);
+    float d2lambdadx2 = lambdaYConst.Derivative2(m_mlX); 
+    float dlambdady   = lambdaXConst.Derivative(m_mlY);
+    float d2lambdady2 = lambdaXConst.Derivative2(m_mlY); 
+
+    
+
+
+    // We also need lambda in terms of x and y
+    std::string r              = "std::sqrt(x*x + y*y)";
+    std::string thetaDeg       = "TMath::ACos(x/"+r+")*180/TMath::Pi()";
+    std::string cosp           = "TMath::Cos( (("+std::to_string(sipm)+"-1)*"+std::to_string(m_beta)+" - "+thetaDeg+")*TMath::Pi()/180 )";
+    std::string rBar           = "std::sqrt("+r+"*"+r+" + "+std::to_string(m_diskRadius)+"*"+std::to_string(m_diskRadius)+" - 2*"+r+"*"+std::to_string(m_diskRadius)+"*"+cosp+")";
+    std::string cosAlpha       = "(("+rBar+"*"+rBar+" + "+std::to_string(m_diskRadius)+"*"+std::to_string(m_diskRadius)+" - "+r+"*"+r+")/(2*"+rBar+"*"+std::to_string(m_diskRadius)+"))";
+    std::string lambdaEquation = std::to_string(m_mlN0)+"*"+cosAlpha+"*TMath::Exp(-"+rBar+"/"+std::to_string(m_attenuationLength)+")/"+rBar; 
+
+    TF2 lambda2D("lambda2D", lambdaEquation.c_str(), -m_diskRadius, m_diskRadius, -m_diskRadius, m_diskRadius);
+
+    // Lambda evaluated at our ml estimate
+    float lambda = lambda2D.Eval(m_mlX, m_mlY); 
+  
+    // Finally...
+    //std::cout << "Sum[0] = " << sum[0] << "  Sum[1] = " << sum[1] << "  ratio = " << (m_data[sipm-1]/lambda) << std::endl;
+
+    sum[0] += (m_data[sipm-1]/(lambda*lambda))*(dlambdadx*dlambdadx) + d2lambdadx2*(1 - (m_data[sipm-1]/lambda));
+    sum[1] += (m_data[sipm-1]/(lambda*lambda))*(dlambdady*dlambdady) + d2lambdady2*(1 - (m_data[sipm-1]/lambda));
+  }
+
+    float h    = 0.0001;
+    std::pair<float, float> rT;
+    rT  = ConvertXYToRTheta(m_mlX+h, m_mlY+h);
+    float l1 = ComputeLogLikelihood(rT.first, rT.second, m_mlN0);
+    rT = ConvertXYToRTheta(m_mlX+h, m_mlY-h);
+    float l2 = ComputeLogLikelihood(rT.first, rT.second, m_mlN0);
+    rT  = ConvertXYToRTheta(m_mlX-h, m_mlY+h);
+		float l3 = ComputeLogLikelihood(rT.first, rT.second, m_mlN0);
+		rT = ConvertXYToRTheta(m_mlX-h, m_mlY-h);
+		float l4 = ComputeLogLikelihood(rT.first, rT.second, m_mlN0);
+    rT  = ConvertXYToRTheta(m_mlX-h, m_mlY);
+    float l1 = ComputeLogLikelihood(rT.first, rT.second, m_mlN0);
+    std::cout << m_mlRadius << " " << m_mlTheta << " " << rT.first << " " << rT.second << std::endl;
+    rT = ConvertXYToRTheta(m_mlX+h, m_mlY);
+    float l2 = ComputeLogLikelihood(rT.first, rT.second, m_mlN0);
+    float fD = (-l1 + 2*m_mlLogLikelihood - l2)/(h*h);
+
+    std::cout << l1 << " " << m_mlLogLikelihood << " " << l2 << std::endl;
+ 
+    std::cout << "Root = " << sum[0] << "  approx = " << fD << std::endl;
+
+
+  //std::cout << "Sum[0] = " << sum[0] << "  Sum[1] = " << sum[1] << std::endl;
+  // The sums are our second derivatives evaluated at our ml estimate
+  // [x-, x+]  --> x +- c*1/sqrt(I)
+  //
+  // Here: c*1/sqrt(I) = m_delta.find(percent)->second
+  //
+  // c = 1.96  --> 95%
+  // c = 1.645 --> 90%
+  // c = 1.0   --> 68%
+  if (sum[0] <= 0 || sum[1] <= 0) return;
+
+  m_deltaX.emplace(95, 1.960/std::sqrt(sum[0]));
+  m_deltaX.emplace(90, 1.645/std::sqrt(sum[0]));
+  m_deltaX.emplace(68, 1.000/std::sqrt(sum[0]));
+
+  m_deltaY.emplace(95, 1.960/std::sqrt(sum[1]));
+  m_deltaY.emplace(90, 1.645/std::sqrt(sum[1])); 
+  m_deltaY.emplace(68, 1.000/std::sqrt(sum[1]));
+
+
+  //std::cout << m_deltaX.find(99)->second << "  " << m_deltaY.find(99)->second << std::endl;
+
+  std::map<float, std::pair<float,float>> xBand, yBand;
+  xBand.emplace( 95, std::make_pair(m_mlX-m_deltaX.find(95)->second, m_mlX+m_deltaX.find(95)->second) );  
+  xBand.emplace( 90, std::make_pair(m_mlX-m_deltaX.find(90)->second, m_mlX+m_deltaX.find(90)->second) );  
+  xBand.emplace( 68, std::make_pair(m_mlX-m_deltaX.find(68)->second, m_mlX+m_deltaX.find(68)->second) );   
+
+  yBand.emplace( 95, std::make_pair(m_mlY-m_deltaY.find(95)->second, m_mlY+m_deltaY.find(95)->second) );  
+  yBand.emplace( 90, std::make_pair(m_mlY-m_deltaY.find(90)->second, m_mlY+m_deltaY.find(90)->second) );  
+  yBand.emplace( 68, std::make_pair(m_mlY-m_deltaY.find(68)->second, m_mlY+m_deltaY.find(68)->second) );   
+
+  std::cout << "95% -->  (" << xBand.find(95)->second.first << ", " << xBand.find(95)->second.second << ")   (" << yBand.find(95)->second.first << "," << yBand.find(95)->second.second << ")\n";
+  std::cout << "90% -->  (" << xBand.find(90)->second.first << ", " << xBand.find(90)->second.second << ")   (" << yBand.find(90)->second.first << "," << yBand.find(90)->second.second << ")\n";
+  std::cout << "68% -->  (" << xBand.find(68)->second.first << ", " << xBand.find(68)->second.second << ")   (" << yBand.find(68)->second.first << "," << yBand.find(68)->second.second << ")\n"; 
+
+  // Now we need to label each voxel according to the confidence band
+  for (auto& voxel : m_voxelList)
+  {
+    // Do this for decreasing confidence
+    voxel.SetCB(0);
+    if (xBand.find(95)->second.first < voxel.X() && voxel.X() < xBand.find(95)->second.second && 
+        yBand.find(95)->second.first < voxel.Y() && voxel.Y() < yBand.find(95)->second.second) {voxel.SetCB(95);}
+    if (xBand.find(90)->second.first < voxel.X() && voxel.X() < xBand.find(90)->second.second &&
+        yBand.find(90)->second.first < voxel.Y() && voxel.Y() < yBand.find(90)->second.second) {voxel.SetCB(90);}
+    if (xBand.find(68)->second.first < voxel.X() && voxel.X() < xBand.find(68)->second.second && 
+        yBand.find(68)->second.first < voxel.Y() && voxel.Y() < yBand.find(68)->second.second) {voxel.SetCB(68);} 
+    //std::cout << voxel.CB() << std::endl;
+  }
+}*/
+
+/*void Analyzer::ComputeConfidenceIntervals()
+{
+  // Some notes:
+  //
+  // c = 2.576 --> 99%
+  // c = 2.326 --> 98%
+  // c = 1.96  --> 95%
+  // c = 1.645 --> 90%
+  //
+  // Here, we will apply a 2D guassian fit to the peak of 
+  // our LogLikelihood distribution to estimate sigmas
+  //
+
+  // Likelihood distribution for m_mlN0
+  TH2D likelihoodDist("likelihoodDist", "Likelihood Distribution", std::sqrt(m_nVoxels), -m_diskRadius, m_diskRadius, std::sqrt(m_nVoxels), -m_diskRadius, m_diskRadius); 
+  
+  for (const auto& voxel : m_voxelList)
+  {
+    // Log likelihood for this parameter set
+    double logLikelihood = ComputeLogLikelihood(voxel.X(), voxel.Y(), m_mlN0);
+
+    unsigned xBin = likelihoodDist.GetXaxis()->FindBin(voxel.X());
+    unsigned yBin = likelihoodDist.GetXaxis()->FindBin(voxel.Y());
+    likelihoodDist.SetBinContent(xBin, yBin, TMath::Exp(logLikelihood));
+  }
+
+  //TF2 gaus
+
+
+  
+  m_deltaX.emplace(95, 1.960/std::sqrt(sum[0]));
+  m_deltaX.emplace(90, 1.645/std::sqrt(sum[0]));
+  m_deltaX.emplace(68, 1.000/std::sqrt(sum[0]));
+
+  m_deltaY.emplace(95, 1.960/std::sqrt(sum[1]));
+  m_deltaY.emplace(90, 1.645/std::sqrt(sum[1])); 
+  m_deltaY.emplace(68, 1.000/std::sqrt(sum[1]));
+
+
+  //std::cout << m_deltaX.find(99)->second << "  " << m_deltaY.find(99)->second << std::endl;
+
+  std::map<float, std::pair<float,float>> xBand, yBand;
+  xBand.emplace( 95, std::make_pair(m_mlX-m_deltaX.find(95)->second, m_mlX+m_deltaX.find(95)->second) );  
+  xBand.emplace( 90, std::make_pair(m_mlX-m_deltaX.find(90)->second, m_mlX+m_deltaX.find(90)->second) );  
+  xBand.emplace( 68, std::make_pair(m_mlX-m_deltaX.find(68)->second, m_mlX+m_deltaX.find(68)->second) );   
+
+  yBand.emplace( 95, std::make_pair(m_mlY-m_deltaY.find(95)->second, m_mlY+m_deltaY.find(95)->second) );  
+  yBand.emplace( 90, std::make_pair(m_mlY-m_deltaY.find(90)->second, m_mlY+m_deltaY.find(90)->second) );  
+  yBand.emplace( 68, std::make_pair(m_mlY-m_deltaY.find(68)->second, m_mlY+m_deltaY.find(68)->second) );   
+
+  std::cout << "95% -->  (" << xBand.find(95)->second.first << ", " << xBand.find(95)->second.second << ")   (" << yBand.find(95)->second.first << "," << yBand.find(95)->second.second << ")\n";
+  std::cout << "90% -->  (" << xBand.find(90)->second.first << ", " << xBand.find(90)->second.second << ")   (" << yBand.find(90)->second.first << "," << yBand.find(90)->second.second << ")\n";
+  std::cout << "68% -->  (" << xBand.find(68)->second.first << ", " << xBand.find(68)->second.second << ")   (" << yBand.find(68)->second.first << "," << yBand.find(68)->second.second << ")\n"; 
+
+  // Now we need to label each voxel according to the confidence band
+  for (auto& voxel : m_voxelList)
+  {
+    // Do this for decreasing confidence
+    voxel.SetCB(0);
+    if (xBand.find(95)->second.first < voxel.X() && voxel.X() < xBand.find(95)->second.second && 
+        yBand.find(95)->second.first < voxel.Y() && voxel.Y() < yBand.find(95)->second.second) {voxel.SetCB(95);}
+    if (xBand.find(90)->second.first < voxel.X() && voxel.X() < xBand.find(90)->second.second &&
+        yBand.find(90)->second.first < voxel.Y() && voxel.Y() < yBand.find(90)->second.second) {voxel.SetCB(90);}
+    if (xBand.find(68)->second.first < voxel.X() && voxel.X() < xBand.find(68)->second.second && 
+        yBand.find(68)->second.first < voxel.Y() && voxel.Y() < yBand.find(68)->second.second) {voxel.SetCB(68);} 
+    //std::cout << voxel.CB() << std::endl;
+  }
+}*/
+
+
+/*std::map<float, std::pair<float,float>> xBand, yBand;
+  xBand.emplace( 95, std::make_pair(m_mlX-m_deltaX.find(95)->second, m_mlX+m_deltaX.find(95)->second) );  
+  xBand.emplace( 90, std::make_pair(m_mlX-m_deltaX.find(90)->second, m_mlX+m_deltaX.find(90)->second) );  
+  xBand.emplace( 68, std::make_pair(m_mlX-m_deltaX.find(68)->second, m_mlX+m_deltaX.find(68)->second) );   
+
+  yBand.emplace( 95, std::make_pair(m_mlY-m_deltaY.find(95)->second, m_mlY+m_deltaY.find(95)->second) );  
+  yBand.emplace( 90, std::make_pair(m_mlY-m_deltaY.find(90)->second, m_mlY+m_deltaY.find(90)->second) );  
+  yBand.emplace( 68, std::make_pair(m_mlY-m_deltaY.find(68)->second, m_mlY+m_deltaY.find(68)->second) );   */
+
+
+// Now we need to label each voxel according to the confidence band
+  for (auto& voxel : m_voxelList)
+  {
+    // Do this for decreasing confidence
+    voxel.SetCB(-1);
+    if (xBand.find(94)->second.first < voxel.X() && voxel.X() < xBand.find(95)->second.second && 
+        yBand.find(94)->second.first < voxel.Y() && voxel.Y() < yBand.find(95)->second.second) {voxel.SetCB(95);}
+    if (xBand.find(89)->second.first < voxel.X() && voxel.X() < xBand.find(90)->second.second &&
+        yBand.find(89)->second.first < voxel.Y() && voxel.Y() < yBand.find(90)->second.second) {voxel.SetCB(90);}
+    if (xBand.find(67)->second.first < voxel.X() && voxel.X() < xBand.find(68)->second.second && 
+        yBand.find(67)->second.first < voxel.Y() && voxel.Y() < yBand.find(68)->second.second) {voxel.SetCB(68);} 
+    //std::cout << voxel.CB() << std::endl;
+  }*
+
+
+/*TGraph g1(5), g2(5), g3(5);
+  // 68
+  g1.SetPoint(0, m_mlX+m_deltaX.find(68)->second,  m_mlY+m_deltaY.find(68)->second);  
+  g1.SetPoint(1, m_mlX-m_deltaX.find(68)->second,  m_mlY+m_deltaY.find(68)->second); 
+  g1.SetPoint(2, m_mlX-m_deltaX.find(68)->second,  m_mlY-m_deltaY.find(68)->second); 
+  g1.SetPoint(3, m_mlX+m_deltaX.find(68)->second,  m_mlY-m_deltaY.find(68)->second); 
+  g1.SetPoint(4, m_mlX+m_deltaX.find(68)->second,  m_mlY+m_deltaY.find(68)->second); 
+  // 90
+  g2.SetPoint(0, m_mlX+m_deltaX.find(90)->second,  m_mlY+m_deltaY.find(90)->second); 
+  g2.SetPoint(1, m_mlX-m_deltaX.find(90)->second,  m_mlY+m_deltaY.find(90)->second); 
+  g2.SetPoint(2, m_mlX-m_deltaX.find(90)->second,  m_mlY-m_deltaY.find(90)->second); 
+  g2.SetPoint(3, m_mlX+m_deltaX.find(90)->second,  m_mlY-m_deltaY.find(90)->second); 
+  g2.SetPoint(4, m_mlX+m_deltaX.find(90)->second,  m_mlY+m_deltaY.find(90)->second); 
+  // 95
+  g3.SetPoint(0, m_mlX+m_deltaX.find(95)->second,  m_mlY+m_deltaY.find(95)->second); 
+  g3.SetPoint(1, m_mlX-m_deltaX.find(95)->second,  m_mlY+m_deltaY.find(95)->second); 
+  g3.SetPoint(2, m_mlX-m_deltaX.find(95)->second,  m_mlY-m_deltaY.find(95)->second); 
+  g3.SetPoint(3, m_mlX+m_deltaX.find(95)->second,  m_mlY-m_deltaY.find(95)->second);  
+  g3.SetPoint(4, m_mlX+m_deltaX.find(95)->second,  m_mlY+m_deltaY.find(95)->second);  
+
+  g1.SetLineWidth(5);
+  g1.SetLineColor(33);
+  g2.SetLineWidth(5);
+  g2.SetLineColor(44);
+  g3.SetLineWidth(5);
+  g3.SetLineColor(46);
+
+
+/*// Form our equation
+  std::string delX2    = std::to_string(m_sigmaInverse[0])+"*(x - [1])*(x - [1])";
+  std::string delY2    = std::to_string(m_sigmaInverse[3])+"*(y - [2])*(y - [2])";
+  std::string delXdelY = "2*"+std::to_string(m_sigmaInverse[1])+"*(x - [1])*(y - [2])";
+  std::string exp      = delX2 + " + " + delXdelY + " + " + delY2;
+  std::string eq       = "[0]*TMath::Exp( -1*("+exp+") )";
+
+  std::cout << eq << std::endl;*/
+ 
+  /*TF2 temp("temp", eq.c_str(), -m_diskRadius, m_diskRadius, -m_diskRadius, m_diskRadius);
+  temp.SetParameters(1, m_mlX, m_mlY);*/
+
+
+  //TF2 bigaus("bigaus", "bigaus", m_mlX-1, m_mlX+1, m_mlY-1, m_mlY+1);
+  //bigaus.SetParameters(TMath::Exp(m_mlLogLikelihood), m_mlX, m_sigmaXDiag, m_mlY, m_sigmaYDiag, 0.1);
+  //likelihoodDist.Fit(&bigaus, "NRQ"); 
+ 
+/*  std::cout << bigaus.GetParameter(0) << " " << bigaus.GetParameter(1) << " " << bigaus.GetParameter(2) << " " << bigaus.GetParameter(3) << bigaus.GetParameter(4) << " " << bigaus.GetParameter(5) << std::endl;*/
+
+
+/*
+void Analyzer::ComputeConfidenceIntervals()
+{
+  // Some notes:
+  //
+  // [x-, x+]  --> x +- c*1/sqrt(I)
+  //
+  // Here: c*1/sqrt(I) = m_delta.find(percent)->second
+  //
+  // We will appoximate derivatives using standard numerical techniques.
+  // We will compute the single CI, diagonalize to compute the joint CI,
+  // where:
+  //
+  // CI = m_mlEstimate +- c*1/sqrt(-l'')
+  //
+
+  // We cannot form CI for events where the eigenvalues of Fisher are > 0!
+  if (m_fisherEigenvalues[0] > 0 || m_fisherEigenvalues[1] > 0) return;
+
+  // Store the sigmas
+  m_sigmaX = 1.000/std::sqrt(-m_fisherEigenvalues[0]);
+  m_sigmaY = 1.000/std::sqrt(-m_fisherEigenvalues[1]);
+
+
+  // Form the margins for each CL
+  m_deltaX.emplace(95, 1.960/std::sqrt(-m_fisherEigenvalues[0]));
+  m_deltaX.emplace(90, 1.645/std::sqrt(-m_fisherEigenvalues[0]));
+  m_deltaX.emplace(68, 1.000/std::sqrt(-m_fisherEigenvalues[0]));
+
+  m_deltaY.emplace(95, 1.960/std::sqrt(-m_fisherEigenvalues[1]));
+  m_deltaY.emplace(90, 1.645/std::sqrt(-m_fisherEigenvalues[1])); 
+  m_deltaY.emplace(68, 1.000/std::sqrt(-m_fisherEigenvalues[1]));
+
+  std::cout << m_deltaX.find(90)->second << "  " << m_deltaY.find(90)->second << std::endl;
+
+}*/
+
+
+
+// Store the diagonal sigmas
+    m_sigmaXDiag = std::sqrt(-m_fisherEigenvalues[0]);
+    m_sigmaYDiag = std::sqrt(-m_fisherEigenvalues[1]);
+
+    // We want to rotate back to our old coordinates now
+    // Our rotation matrix is formed by the eigenvectors
+    TArrayD rotData(4);
+    rotData[0] = e1[0];
+    rotData[1] = e2[0];
+    rotData[2] = e1[1];
+    rotData[3] = e2[1];
+    // Our diagonal matrix has 1/m_sigmaXDiag^2 and 1/m_sigmaYDiag^2
+    TArrayD diagData(4);
+    diagData[0] = 1/(m_sigmaXDiag*m_sigmaXDiag);
+    diagData[1] = 0;
+    diagData[2] = 0;
+    diagData[3] = 1/(m_sigmaYDiag*m_sigmaYDiag);
+
+    TMatrixD rotationMatrix(2,2);
+    rotationMatrix.SetMatrixArray(rotData.GetArray());
+    TMatrixD diagMatrix(2,2);
+    diagMatrix.SetMatrixArray(diagData.GetArray());
+
+    //rotationMatrix.Print();
+    //diagMatrix.Print();
+    //std::cout << -m_fisherEigenvalues[0] << " " << -m_fisherEigenvalues[1] << std::endl;
+
+    TDecompLU lu(rotationMatrix);
+    TMatrixD inverseRotationMatrix = rotationMatrix;
+    if (!lu.Decompose()) 
+    {
+      std::cout << "Decomposition failed, matrix singular!!" << std::endl;
+      return;
+    }
+    else lu.Invert(inverseRotationMatrix);
+
+    // Now we have the matrices we need
+    // Calculate:
+    //
+    // Sigma^-1 = R*Diag*R^-1
+    //
+   
+    TMatrixD sigmaInverseMatrix = rotationMatrix*diagMatrix*inverseRotationMatrix;
+    // Now invert this!
+    TDecompLU lu2(sigmaInverseMatrix);
+    TMatrixD sigmaMatrix = sigmaInverseMatrix;
+    if (!lu2.Decompose()) 
+    {
+      std::cout << "Decomposition failed, matrix singular!!" << std::endl;
+      return;
+
