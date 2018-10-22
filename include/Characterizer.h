@@ -26,17 +26,17 @@ public:
   ~Characterizer();
   
   void Characterize(SiPMInfoMap& sipmInfoMap, const SiPMToTriggerMap& sipmToTriggerMap, const Configuration& config);
+  void SaveCharacterizationPlots(const wheel::Configuration& config);
+  void Initialize(const Configuration& config);
 
-  std::map<unsigned, std::vector<TH1D>>&         GetAmpDists() { return ampDists; }
-  std::map<unsigned, std::vector<TGraphErrors>>& GetAmpPeaks() { return ampPeaks; }
-    
 private:
 
   void         MakeHistograms(const unsigned& sipm, const std::vector<HitCandidateVec>& hitCandVec, const Configuration& config);
-  TGraphErrors FitGain(TH1D& hs, const unsigned& sipm, SiPMGains& sipmGains, const unsigned& nBias, const Configuration& config);
+  TGraphErrors FitGain(TH1D& hs, const unsigned& sipm, const unsigned& nBias, const Configuration& config);
 
-  std::map<unsigned, std::vector<TH1D>> ampDists;
-  std::map<unsigned, std::vector<TGraphErrors>> ampPeaks;
+  std::map<unsigned, std::vector<TH1D>>         m_ampDists;
+  std::map<unsigned, std::vector<TGraphErrors*>> m_ampPeaks;
+  SiPMGains m_sipmGains;
 
 };
 }

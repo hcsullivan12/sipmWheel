@@ -27,7 +27,6 @@ struct HitCandidate
   float  stopTickAmp;
   float  bias;
   size_t nPhotons;
-  float  hitBase;
   float  hitPeak;
   float  hitPeakTick;
   float  hitAmplitude;
@@ -48,14 +47,14 @@ using SiPMToHitCandVecMap  = std::map<unsigned, HitCandidateVec>;
 using SiPMToFilesMap       = std::map<unsigned, std::set<std::string>>;
 using SiPMToTriggerMap     = std::map<unsigned, std::vector<HitCandidateVec>>;
 using SiPMToBiasTriggerMap = std::map<unsigned, std::map<float, std::set<std::string>>>;  
-using SiPMGains            = std::multimap<unsigned, float>;
+using SiPMGains            = std::vector<std::vector<std::vector<float>>>;
 using SiPMInfoMap          = std::map<unsigned, SiPMInfo>;
 using BinIndex             = std::pair<unsigned, std::map<std::string, float>>;
 using AccumulatorMap       = std::vector<BinIndex>;  // N0, r, theta, likelihood
 using DataList             = std::list<std::map<unsigned, float>>;
 using AccumulatorMapList   = std::list<AccumulatorMap>;
 using BiasToFileMap        = std::map<float, std::set<std::string>>;
-using MarkerPairVec        = std::vector<std::vector<std::pair<TMarker,TMarker>>>;
+using MarkerListVec        = std::vector<std::list<TMarker>>;
 
 struct Configuration 
 {
@@ -69,6 +68,7 @@ struct Configuration
   bool             saveRawWaveforms;                   ///< Option to save raw waveforms
   bool             saveModWaveforms;                   ///< Option to save modified waveforms
   unsigned         nSiPMs;                             ///< Number of sipms 
+  bool             smoothWaveform;                     ///< Option to perform a running average
   unsigned         smaRange;                           ///< Range around center for applying average on waveform
   unsigned         resolution;                         ///< Resolution to keep on waveform
   float            hitSigma;                           ///< 
