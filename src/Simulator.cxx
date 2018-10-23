@@ -81,8 +81,9 @@ void Simulator::Simulate()
     // Emit!
     Emit(photon);
     // Step!
-    Step(photon);
-    
+    if (!Step(photon)) continue;
+    // Reflect!
+    if (!Reflect(photon);
 
   }
   
@@ -123,6 +124,7 @@ void Simulator::ConvertToCartesian(float& x, float& y, const float& r, const flo
 void Simulator::Emit(Photon& photon)
 {
   // We will assume uniform distribution for direction
+  // Bottom of disk is the xy plane
   // **TODO: Pick the wavelength**
   
   // Only accept if z <= 0
@@ -132,21 +134,52 @@ void Simulator::Emit(Photon& photon)
   // Exchange for floats (get rid of warning message)
   float x = xTemp; float y = yTemp; float z = zTemp;
 
-  // Get XY position of our light source
-  float lsX(0), lsY(0);
+  // Get XYZ position of our light source
+  // Assuming light source is pointing in -z direction
+  float lsX(0), lsY(0), lsZ(m_diskThickness);
   ConvertToCartesian(lsX, lsY, m_sourcePosition[0], m_sourcePosition[1]);
 
-  std::vector<float> unitMomentumVec = {x,     y, z};
-  std::vector<float> lastPos         = {lsX, lsY, 0};
-  std::vector<float> currentPos      = {lsX, lsY, 0}; 
+  std::vector<float> unitMomentumVec = {x,     y,   z};
+  std::vector<float> lastPos         = {lsX, lsY, lsZ};
+  std::vector<float> currentPos      = {lsX, lsY, lsZ}; 
+  std::vector<float> nextPos         = currentPos;
 
-  photon.UpdateStatus(1.0, unitMomentumVec, lastPos, currentPos);
+  // Assuming no interaction, where is the next surface?
+  CalculateNextPosition(nextPos, currentPos, unitMomentumVec); 
+
+  photon.UpdateStatus(1.0, unitMomentumVec, lastPos, currentPos, nextPos);
 }
 
-void Simulator::Step(Photon& photon)
+void Simulator::CalculateNextPosition(std::vector<float>& nextPos, const std::vector<float>& currentPos, const std::vector<float>& unitMomentumVec)
+{ 
+  // Keep moving until we've crossed boundary
+  float epsilon(0.001), r(0);
+
+  while (r < m_diskRadius && nextPos[2] >= 0 && nextPos[2] <= m_diskThickness)
+  {
+    // Increment
+    nextPos[0] = nextPos[0] + epsilon*unitMomentumVec[0];
+    nextPos[1] = nextPos[1] + epsilon*unitMomentumVec[1];
+    nextPos[2] = nextPos[2] + epsilon*unitMomentumVec[2];
+
+    // Recalculate r
+    r = std::sqrt(nextPos[0]*nextPos[0] + nextPos[1]*nextPos[1]);
+  }
+}
+
+bool Simulator::Step(Photon& photon)
 {
   // First: bulk propogation
- // auto stepSize = m_rg.Exp(m_
+  auto stepSize = m_rg.Exp(m_bulkAbsorption);
+  auto dist     = CalculateDistance(photon.CurrentPosition(), photon.NextPosition());  
 
+  if (dist >= stepSize) return false;
+  return true;
+}
+
+float Simulator::CalculateDistance(const std::vector<float>& currentPos, const std::vector<float>& nextPos)
+{
+  float delta[3] = {currentPos[0]-nextPos[0], currentPos[1]-nextPos[1], currentPos[2]-nextPos[2]};
+  return std::sqrt(delta[0]*delta[0] + delta[1]*delta[1] + delta[2]*delta[2]);
 }
 }
