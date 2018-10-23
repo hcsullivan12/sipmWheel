@@ -439,7 +439,7 @@ void SaveWaveforms(wheel::FileReader& fr, const wheel::Configuration& config)
     std::cout << "Outputing modified waveforms... " << std::endl;
     // Create a file to write to
     TFile f(config.modWaveformPath.c_str(), "RECREATE");
-  
+    
     unsigned counter = 0;
     for (auto& g : fr.GetModGraphs())
     {
@@ -454,6 +454,7 @@ void SaveWaveforms(wheel::FileReader& fr, const wheel::Configuration& config)
       c.Write();
       counter++;
     }
+   
   f.Close();
   }
 }

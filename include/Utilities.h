@@ -94,12 +94,17 @@ struct Configuration
   float                     diskRadius;                ///< Disk radius (in cm)
   float                     diskThickness;             ///< Thickness of the disk (in cm)
   unsigned                  nSiPMs;                    ///< Number of sipms 
+  float                     sipmArea;                  ///< Area of sipms
   float                     attenuationLength;         ///< Attenuation length for disk (in cm)
   // Simulation information
   std::vector<float>        sourcePosition;            ///< Light source position. radius from center and theta measured counterclockwise from sipm1 (cm, deg)
   float                     tpbEmissionPeak;           ///< TPB emission peak wavelength (nm)
   float                     indexRefractionDisk;       ///< Index of refraction for the disk
-  float                     indexRefractionMedium;     ///< Index of refraction for the sorrounding medium
+  float                     indexRefractionEnv;        ///< Index of refraction for the sorrounding environment
+  unsigned                  nPhotonsToLaunch;          ///< Number of photons to simulate
+  float                     terminationThreshold;      ///< Threshold for photon termination
+  float                     bulkAbsorption;            ///< Bulk absorption length
+  float                     surfaceAbsorptionCoeff;    ///< Surface absorption coeffecient
 };
 }
 

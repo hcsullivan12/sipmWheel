@@ -116,7 +116,8 @@ void Analyzer::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap
   // Start main loop
   // We will cover the entire parameter space, at the expense of computation time
   // Once N0 is calculated, we'll use Newton-Raphson to better approximate x and y
-  while ( N0 <= 300 ) 
+  N0 = 500;
+  while ( N0 <= 5000 ) 
   {
     Handle(N0);
     N0++;
@@ -384,8 +385,13 @@ void Analyzer::MakePlot(const unsigned& trigger)
     // Log likelihood for this parameter set
     double logLikelihood = ComputeLogLikelihood(voxel.X(), voxel.Y(), m_mlN0);
 
+    float r(0), theta(0);
+    ConvertToPolar(r, theta, voxel.X(), voxel.Y());
+    if (r > m_diskRadius/2.0 && theta > 260 && theta < 280) std::cout << TMath::Exp(logLikelihood) << std::endl;
+
     unsigned xBin = likelihoodDist.GetXaxis()->FindBin(voxel.X());
     unsigned yBin = likelihoodDist.GetXaxis()->FindBin(voxel.Y());
+    if (TMath::Exp(logLikelihood) < 1e-10) logLikelihood = std::log(1e-10);
     likelihoodDist.SetBinContent(xBin, yBin, TMath::Exp(logLikelihood));
   }  
 
