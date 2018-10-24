@@ -116,7 +116,6 @@ void Analyzer::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap
   // Start main loop
   // We will cover the entire parameter space, at the expense of computation time
   // Once N0 is calculated, we'll use Newton-Raphson to better approximate x and y
-  N0 = 500;
   while ( N0 <= 5000 ) 
   {
     Handle(N0);
@@ -344,6 +343,8 @@ std::pair<unsigned, unsigned> Analyzer::InitData(SiPMToTriggerMap& sipmToTrigger
   // Which sipm saw the largest number of photons?
   unsigned maxSiPM;
   unsigned max(0);
+  // Will will use this as a lower bound for N0
+  unsigned total(0);
 
   // Loop over all the hits and set the n of photons
   for (auto& sipm : sipmToTriggerMap)
@@ -364,13 +365,14 @@ std::pair<unsigned, unsigned> Analyzer::InitData(SiPMToTriggerMap& sipmToTrigger
 
     // Store counts in data container
     m_data.emplace(sipm.first, sipmCounts);
+    total += sipmCounts;
     std::cout << "SiPM " << sipm.first << " --> " << sipmCounts << " p.e.\n";
   }
 
   // For use later on
   m_maxCounts = max;
 
-  return std::make_pair(maxSiPM, max);
+  return std::make_pair(maxSiPM, total);
 }
 
 void Analyzer::MakePlot(const unsigned& trigger)
@@ -378,51 +380,43 @@ void Analyzer::MakePlot(const unsigned& trigger)
   TFile f(m_recoOutputPath.c_str(), "UPDATE");
 
   // Log Likelihood distribution for m_mlN0
-  TH2D logLikelihoodDist("logLikelihoodDist", "Log Likelihood Distribution", std::sqrt(m_nVoxels), -m_diskRadius, m_diskRadius, std::sqrt(m_nVoxels), -m_diskRadius, m_diskRadius); 
+  TH2D logLikelihoodDist("logLikelihoodDist", "Likelihood Profile", 500, -m_diskRadius, m_diskRadius, 500, -m_diskRadius, m_diskRadius); 
   // Make a copy for contours
   auto contour68 = logLikelihoodDist;
-  float min(0);  
 
-  for (const auto& voxel : m_voxelList)
-  {
-    // Log likelihood for this parameter set
-    double logLikelihood = ComputeLogLikelihood(voxel.X(), voxel.Y(), m_mlN0);
-
-    float r(0), theta(0);
-    ConvertToPolar(r, theta, voxel.X(), voxel.Y());
-
-    unsigned xBin = logLikelihoodDist.GetXaxis()->FindBin(voxel.X());
-    unsigned yBin = logLikelihoodDist.GetXaxis()->FindBin(voxel.Y());
-    // For plotting purposes
-    if (TMath::Exp(logLikelihood) < 1e-10) logLikelihood = std::log(1e-10);
-    logLikelihoodDist.SetBinContent(xBin, yBin, logLikelihood);
-    contour68.SetBinContent(xBin, yBin, logLikelihood);
-
-    if (logLikelihood < min) min = logLikelihood;
-  }  
   for (unsigned xBin = 1; xBin <= contour68.GetXaxis()->GetNbins(); xBin++)
   {
     for (unsigned yBin = 1; yBin <= contour68.GetYaxis()->GetNbins(); yBin++)
     {
-      float x(contour68.GetXaxis()->GetBinCenter(xBin));
-      float y(contour68.GetYaxis()->GetBinCenter(yBin));
+      // Log likelihood for this parameter set
+      float x(logLikelihoodDist.GetXaxis()->GetBinCenter(xBin));
+      float y(logLikelihoodDist.GetYaxis()->GetBinCenter(yBin));
+      double logLikelihood = ComputeLogLikelihood(x, y, m_mlN0);
+
       float r(0), theta(0);
       ConvertToPolar(r, theta, x, y);
 
-      if (r > (m_diskRadius - 1)) contour68.SetBinContent(xBin, yBin, min);
-    }
-  }
+      float diff = -2*(logLikelihood - m_mlLogLikelihood);
 
+      // For plotting purposes
+      if (diff > 20.0) diff = 20;
+      if (r > (m_diskRadius-1)) diff = 0;
+  
+      logLikelihoodDist.SetBinContent(xBin, yBin, diff);
+      if (r > (m_diskRadius - 2)) diff = 20;
+      contour68.SetBinContent(xBin, yBin, diff);
+    }
+  }  
+  
   // Make copies to draw our contours
   auto contour90 = contour68;
   auto contour95 = contour68;
 
   // Set the confidence levels
   Double_t level68[1], level90[1], level95[1];
-  double A = m_mlLogLikelihood;
-  level68[0]   = A - 0.5*TMath::ChisquareQuantile(0.68,3); // We had 3 d.o.f
-  level90[0]   = A - 0.5*TMath::ChisquareQuantile(0.90,3);
-  level95[0]   = A - 0.5*TMath::ChisquareQuantile(0.95,3);
+  level68[0] = TMath::ChisquareQuantile(0.68,3); // We had 3 d.o.f
+  level90[0] = TMath::ChisquareQuantile(0.90,3);
+  level95[0] = TMath::ChisquareQuantile(0.95,3);
   contour68.SetContour(1, level68);
   contour90.SetContour(1, level90);
   contour95.SetContour(1, level95);
@@ -436,7 +430,7 @@ void Analyzer::MakePlot(const unsigned& trigger)
   contour90.SetLineWidth(5);
   contour95.SetLineWidth(5);
   contour68.SetLineColor(4);
-  contour90.SetLineColor(5);
+  contour90.SetLineColor(2);
   contour95.SetLineColor(3);
   contour68.Draw("cont3 same");
   contour90.Draw("cont3 same");
@@ -456,6 +450,7 @@ void Analyzer::MakePlot(const unsigned& trigger)
   leg1.AddEntry(&xy, "MLE Position", "p");
   leg1.Draw("same");
   gStyle->SetPalette(53);
+  TColor::InvertPalette();
   c1.Modified();
 
   c1.Update();
