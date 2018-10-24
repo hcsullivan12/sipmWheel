@@ -13,6 +13,7 @@
 #include <fstream>
 #include <iostream>
 #include "TRandom.h"
+#include "TH1.h"
 
 namespace wheel {
 
@@ -77,7 +78,9 @@ private:
   void  CalculateNextPosition(std::vector<float>& nextPos, const std::vector<float>& currentPos, const std::vector<float>& unitMomentumVec);
   float CalculateDistance(const std::vector<float>& currentPos, const std::vector<float>& nextPos);
   bool  Step(Photon& photon);
-  
+  bool  Reflect(Photon& photon); 
+  void  MakePlots();
+ 
   std::string              m_simulateOutputPath;     ///< Output path for results
   unsigned                 m_nSiPMs;                 ///< Number of sipms
   float                    m_sipmArea;               ///< Active area of sipm
@@ -92,6 +95,7 @@ private:
   float                    m_surfaceAbsorptionCoeff; ///< Surface absorption coeffecient (0 < s < 1)
   float                    m_bulkAbsorption;         ///< Bulk absorption length
   std::map<unsigned, SiPM> m_sipmMap;                ///< Map to sipm info
+  TH1S                     m_stepHist;               ///< Histogram of steps
   TRandom                  m_rg;                     ///< Random number generator
 };
 }

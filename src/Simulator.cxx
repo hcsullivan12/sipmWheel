@@ -8,6 +8,7 @@
 
 #include "Simulator.h"
 #include "TMath.h"
+#include "TFile.h"
 
 namespace wheel {
 
@@ -43,6 +44,8 @@ Simulator::Simulator(const Configuration& config)
   m_surfaceAbsorptionCoeff = config.surfaceAbsorptionCoeff;
   // Set seed
   m_rg.SetSeed(0);
+  // Initialize histograms
+  m_stepHist.SetBins(100, 0, 200);
 }
 
 Simulator::~Simulator()
@@ -83,10 +86,11 @@ void Simulator::Simulate()
     // Step!
     if (!Step(photon)) continue;
     // Reflect!
-    if (!Reflect(photon);
+    if (!Reflect(photon));
 
   }
-  
+
+  MakePlots();
 }
 
 void Simulator::Initialize()
@@ -172,6 +176,7 @@ bool Simulator::Step(Photon& photon)
   // First: bulk propogation
   auto stepSize = m_rg.Exp(m_bulkAbsorption);
   auto dist     = CalculateDistance(photon.CurrentPosition(), photon.NextPosition());  
+  m_stepHist.Fill(stepSize);
 
   if (dist >= stepSize) return false;
   return true;
@@ -181,5 +186,18 @@ float Simulator::CalculateDistance(const std::vector<float>& currentPos, const s
 {
   float delta[3] = {currentPos[0]-nextPos[0], currentPos[1]-nextPos[1], currentPos[2]-nextPos[2]};
   return std::sqrt(delta[0]*delta[0] + delta[1]*delta[1] + delta[2]*delta[2]);
+}
+
+bool Simulator::Reflect(Photon& photon)
+{
+
+  return true;
+}
+
+void Simulator::MakePlots()
+{
+  TFile f(m_simulateOutputPath.c_str(), "RECREATE");
+
+  m_stepHist.Write();
 }
 }

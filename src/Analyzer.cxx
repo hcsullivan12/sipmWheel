@@ -377,9 +377,12 @@ void Analyzer::MakePlot(const unsigned& trigger)
 {
   TFile f(m_recoOutputPath.c_str(), "UPDATE");
 
-  // Likelihood distribution for m_mlN0
-  TH2D likelihoodDist("likelihoodDist", "Likelihood Distribution", std::sqrt(m_nVoxels), -m_diskRadius, m_diskRadius, std::sqrt(m_nVoxels), -m_diskRadius, m_diskRadius); 
-  
+  // Log Likelihood distribution for m_mlN0
+  TH2D logLikelihoodDist("logLikelihoodDist", "Log Likelihood Distribution", std::sqrt(m_nVoxels), -m_diskRadius, m_diskRadius, std::sqrt(m_nVoxels), -m_diskRadius, m_diskRadius); 
+  // Make a copy for contours
+  auto contour68 = logLikelihoodDist;
+  float min(0);  
+
   for (const auto& voxel : m_voxelList)
   {
     // Log likelihood for this parameter set
@@ -387,45 +390,58 @@ void Analyzer::MakePlot(const unsigned& trigger)
 
     float r(0), theta(0);
     ConvertToPolar(r, theta, voxel.X(), voxel.Y());
-    if (r > m_diskRadius/2.0 && theta > 260 && theta < 280) std::cout << TMath::Exp(logLikelihood) << std::endl;
 
-    unsigned xBin = likelihoodDist.GetXaxis()->FindBin(voxel.X());
-    unsigned yBin = likelihoodDist.GetXaxis()->FindBin(voxel.Y());
+    unsigned xBin = logLikelihoodDist.GetXaxis()->FindBin(voxel.X());
+    unsigned yBin = logLikelihoodDist.GetXaxis()->FindBin(voxel.Y());
+    // For plotting purposes
     if (TMath::Exp(logLikelihood) < 1e-10) logLikelihood = std::log(1e-10);
-    likelihoodDist.SetBinContent(xBin, yBin, TMath::Exp(logLikelihood));
+    logLikelihoodDist.SetBinContent(xBin, yBin, logLikelihood);
+    contour68.SetBinContent(xBin, yBin, logLikelihood);
+
+    if (logLikelihood < min) min = logLikelihood;
   }  
+  for (unsigned xBin = 1; xBin <= contour68.GetXaxis()->GetNbins(); xBin++)
+  {
+    for (unsigned yBin = 1; yBin <= contour68.GetYaxis()->GetNbins(); yBin++)
+    {
+      float x(contour68.GetXaxis()->GetBinCenter(xBin));
+      float y(contour68.GetYaxis()->GetBinCenter(yBin));
+      float r(0), theta(0);
+      ConvertToPolar(r, theta, x, y);
+
+      if (r > (m_diskRadius - 1)) contour68.SetBinContent(xBin, yBin, min);
+    }
+  }
 
   // Make copies to draw our contours
-  auto contour68 = likelihoodDist;
-  auto contour90 = likelihoodDist;
-  auto contour95 = likelihoodDist;
+  auto contour90 = contour68;
+  auto contour95 = contour68;
 
   // Set the confidence levels
   Double_t level68[1], level90[1], level95[1];
-  double A = TMath::Exp(m_mlLogLikelihood);
-  level68[0] = A*TMath::Exp(-0.5*TMath::ChisquareQuantile(0.68,2));
-  level90[0] = A*TMath::Exp(-0.5*TMath::ChisquareQuantile(0.90,2));
-  level95[0] = A*TMath::Exp(-0.5*TMath::ChisquareQuantile(0.95,2));
+  double A = m_mlLogLikelihood;
+  level68[0]   = A - 0.5*TMath::ChisquareQuantile(0.68,3); // We had 3 d.o.f
+  level90[0]   = A - 0.5*TMath::ChisquareQuantile(0.90,3);
+  level95[0]   = A - 0.5*TMath::ChisquareQuantile(0.95,3);
   contour68.SetContour(1, level68);
   contour90.SetContour(1, level90);
   contour95.SetContour(1, level95);
 
   // Now draw the distribution and confidence regions
-  std::string name1 = "likelihood_CL_" + std::to_string(trigger);
+  std::string name1 = "logLikelihood_CL_" + std::to_string(trigger);
   TCanvas c1(name1.c_str(), name1.c_str(), 800, 800);
-  gStyle->SetOptStat(0);
-  likelihoodDist.Draw("colz");
+  logLikelihoodDist.Draw("colz");
 
-  contour68.SetLineWidth(4);
-  contour90.SetLineWidth(4);
-  contour95.SetLineWidth(4);
-  contour68.SetLineColor(2);
+  contour68.SetLineWidth(5);
+  contour90.SetLineWidth(5);
+  contour95.SetLineWidth(5);
+  contour68.SetLineColor(4);
   contour90.SetLineColor(5);
   contour95.SetLineColor(3);
   contour68.Draw("cont3 same");
   contour90.Draw("cont3 same");
   contour95.Draw("cont3 same");
- 
+
   // Add a marker for the MLE
   TMarker xy(m_mlX, m_mlY, 20);
   xy.SetMarkerSize(2);
@@ -439,6 +455,8 @@ void Analyzer::MakePlot(const unsigned& trigger)
   leg1.AddEntry(&contour95, "95% CL", "l"); 
   leg1.AddEntry(&xy, "MLE Position", "p");
   leg1.Draw("same");
+  gStyle->SetPalette(53);
+  c1.Modified();
 
   c1.Update();
   c1.Write(); 
