@@ -65,6 +65,8 @@ void OutputConfigInfo(wheel::Configuration& config)
             << "DiskRadius             " << config.diskRadius                     << std::endl
             << "DiskThickness          " << config.diskThickness                  << std::endl
             << "SourcePosition         " << config.sourcePosition[0] << " " << config.sourcePosition[1] << std::endl
+            << "SourceSigma            " << config.sourceSigma                    << std::endl
+            << "SmearSigma             " << config.smearSigma                     << std::endl
             << "IndexRefractionDisk    " << config.indexRefractionDisk            << std::endl
             << "IndexRefractionEnv     " << config.indexRefractionEnv             << std::endl
             << "BulkAbsorption         " << config.bulkAbsorption                 << std::endl
@@ -92,12 +94,15 @@ void ReadConfigFile(wheel::Configuration& config)
     else if (header == "simulateOutputPath")      config.simulateOutputPath = value;
     else if (header == "nSiPMs")                  config.nSiPMs = stoi(value);
     else if (header == "sipmArea")                config.sipmArea = stof(value);
-    else if (header == "sourcePosition")          RecordPosition(config, value); 
+    else if (header == "sourcePosition")          RecordPosition(config, value);
+    else if (header == "sourceSigma")             config.sourceSigma = std::stof(value);
+    else if (header == "smearSigma")              config.smearSigma  = std::stof(value);
     else if (header == "diskRadius")              config.diskRadius = std::stof(value);
     else if (header == "diskThickness")           config.diskThickness = std::stof(value);
     else if (header == "tpbEmissionPeak")         config.tpbEmissionPeak = std::stof(value); 
     else if (header == "indexRefractionDisk")     config.indexRefractionDisk = std::stof(value);
     else if (header == "indexRefractionEnv")      config.indexRefractionEnv  = std::stof(value);
+    else if (header == "bulkAttenuation")         config.bulkAttenuation     = std::stof(value);
     else if (header == "bulkAbsorption")          config.bulkAbsorption      = std::stof(value);
     else if (header == "surfaceAbsorptionCoeff")  config.surfaceAbsorptionCoeff = std::stof(value);
     else if (header == "nPhotonsToLaunch")        config.nPhotonsToLaunch      = std::stoi(value);
@@ -106,6 +111,8 @@ void ReadConfigFile(wheel::Configuration& config)
   }
   
   // Place a series of safety nets here
+  // TODO: May need to change these comparisons!
+  //       Not good to compare floats!
   if (config.nSiPMs <= 1)              { std::cout << "Error. Please specify more than 1 sipm (even number)\n" << std::endl; exit(1); }
   if (config.process != "simulate")    { std::cout << "Error. Please specify 'simulate' as the process in config.\n" << std::endl; exit(1); }
   if (config.diskRadius <= 0)          { std::cout << "Error. Disk radius == 0!\n." << std::endl; exit(1); }
@@ -114,8 +121,11 @@ void ReadConfigFile(wheel::Configuration& config)
   if (config.indexRefractionDisk <= 0) { std::cout << "Error. Index of refraction disk == 0!\n." << std::endl; exit(1); }
   if (config.indexRefractionEnv <= 0)  { std::cout << "Error. Index of refraction medium == 0!\n." << std::endl; exit(1); }
   if (config.sourcePosition.size() < 2) { std::cout << "Error. Please list sourcePosition as r,theta in configuration\n" << std::endl; exit(1); }
+  if (config.sourceSigma == 0)         { std::cout << "Error. Source sigma == 0!\n" << std::endl; exit(1); }
+  if (config.smearSigma == 0)          { std::cout << "Error. Smear sigma == 0!\n" << std::endl; exit(1); }
   if (config.nPhotonsToLaunch <= 0) { std::cout << "Error. Please specify number of photons to simulate.\n" << std::endl; exit(1); }
-  if (config.bulkAbsorption <= 0) { std::cout << "Error. Please specify a bulkAbsorption > 0!\n" << std::endl; exit(1); }
+  if (config.bulkAttenuation <= 0)  { std::cout << "Error. Please specify bulkAttenuation > 0\n" << std::endl; exit(1); }
+  if (config.bulkAbsorption < 0) { std::cout << "Error. Please specify a bulkAbsorption > 0!\n" << std::endl; exit(1); }
   if (config.surfaceAbsorptionCoeff < 0 || config.surfaceAbsorptionCoeff > 1) { std::cout << "Error. Please specify a 0 < surfaceAbsorptionCoeff < 1.\n" << std::endl; exit(1); }
   if (config.terminationThreshold <= 0) { std::cout << "Error. Please specify termination threshold > 0.\n" << std::endl; exit(1); }
 }

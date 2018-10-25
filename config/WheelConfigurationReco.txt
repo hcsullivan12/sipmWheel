@@ -19,4 +19,4 @@ breakdowns=71,71,71,71
 diskRadius=14.5
 maxIterations=20
 attenuationLength=10
-nVoxels=6400
+nVoxels=3600

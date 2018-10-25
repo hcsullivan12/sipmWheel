@@ -98,11 +98,14 @@ struct Configuration
   float                     attenuationLength;         ///< Attenuation length for disk (in cm)
   // Simulation information
   std::vector<float>        sourcePosition;            ///< Light source position. radius from center and theta measured counterclockwise from sipm1 (cm, deg)
+  float                     sourceSigma;               ///< Spread in light position
+  float                     smearSigma;                ///< Spread in incidence angle
   float                     tpbEmissionPeak;           ///< TPB emission peak wavelength (nm)
   float                     indexRefractionDisk;       ///< Index of refraction for the disk
   float                     indexRefractionEnv;        ///< Index of refraction for the sorrounding environment
   unsigned                  nPhotonsToLaunch;          ///< Number of photons to simulate
   float                     terminationThreshold;      ///< Threshold for photon termination
+  float                     bulkAttenuation;           ///< Bulk attenuation length
   float                     bulkAbsorption;            ///< Bulk absorption length
   float                     surfaceAbsorptionCoeff;    ///< Surface absorption coeffecient
 };

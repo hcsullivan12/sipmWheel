@@ -104,6 +104,11 @@ void Analyzer::InitVoxelList()
 
 void Analyzer::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const unsigned& trigger)
 {
+  // The idea here is to first get a rough estimate of the MLE parameters by
+  // a simple grid search (this will be modified based on the application to
+  // optimize computation time). Then we will try to apply the Newton-Raphson 
+  // method to refine the estimate. 
+
   // Start the timer for this trigger
   clock_t start = clock();
 
@@ -116,10 +121,10 @@ void Analyzer::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap
   // Start main loop
   // We will cover the entire parameter space, at the expense of computation time
   // Once N0 is calculated, we'll use Newton-Raphson to better approximate x and y
-  while ( N0 <= 5000 ) 
+  while (N0 <= 5000) 
   {
     Handle(N0);
-    N0++;
+    N0 = N0+5;
   }
  
   // We should have the ml now
