@@ -59,7 +59,7 @@ void Analyzer::Initialize(const Configuration& config)
   m_nSiPMs            = config.nSiPMs;
   m_mlLogLikelihood   = std::numeric_limits<double>::lowest();
   m_mlRadius = 0; m_mlTheta = 0; m_mlN0 = 0; 
-  m_recoOutputFile    = config.recoOutputFile;
+  m_recoOutputPath    = config.recoOutputPath;
   m_data.clear();
   // Create the voxels
   InitVoxelList();
@@ -104,6 +104,11 @@ void Analyzer::InitVoxelList()
 
 void Analyzer::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const unsigned& trigger)
 {
+  // The idea here is to first get a rough estimate of the MLE parameters by
+  // a simple grid search (this will be modified based on the application to
+  // optimize computation time). Then we will try to apply the Newton-Raphson 
+  // method to refine the estimate. 
+
   // Start the timer for this trigger
   clock_t start = clock();
 
@@ -116,10 +121,10 @@ void Analyzer::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap
   // Start main loop
   // We will cover the entire parameter space, at the expense of computation time
   // Once N0 is calculated, we'll use Newton-Raphson to better approximate x and y
-  while ( N0 <= 300 ) 
+  while (N0 <= 5000) 
   {
     Handle(N0);
-    N0++;
+    N0 = N0+5;
   }
  
   // We should have the ml now
@@ -343,6 +348,8 @@ std::pair<unsigned, unsigned> Analyzer::InitData(SiPMToTriggerMap& sipmToTrigger
   // Which sipm saw the largest number of photons?
   unsigned maxSiPM;
   unsigned max(0);
+  // Will will use this as a lower bound for N0
+  unsigned total(0);
 
   // Loop over all the hits and set the n of photons
   for (auto& sipm : sipmToTriggerMap)
@@ -363,63 +370,77 @@ std::pair<unsigned, unsigned> Analyzer::InitData(SiPMToTriggerMap& sipmToTrigger
 
     // Store counts in data container
     m_data.emplace(sipm.first, sipmCounts);
+    total += sipmCounts;
     std::cout << "SiPM " << sipm.first << " --> " << sipmCounts << " p.e.\n";
   }
 
   // For use later on
   m_maxCounts = max;
 
-  return std::make_pair(maxSiPM, max);
+  return std::make_pair(maxSiPM, total);
 }
 
 void Analyzer::MakePlot(const unsigned& trigger)
 {
-  TFile f(m_recoOutputFile.c_str(), "UPDATE");
+  TFile f(m_recoOutputPath.c_str(), "UPDATE");
 
-  // Likelihood distribution for m_mlN0
-  TH2D likelihoodDist("likelihoodDist", "Likelihood Distribution", std::sqrt(m_nVoxels), -m_diskRadius, m_diskRadius, std::sqrt(m_nVoxels), -m_diskRadius, m_diskRadius); 
-  
-  for (const auto& voxel : m_voxelList)
+  // Log Likelihood distribution for m_mlN0
+  TH2D logLikelihoodDist("logLikelihoodDist", "Likelihood Profile", 500, -m_diskRadius, m_diskRadius, 500, -m_diskRadius, m_diskRadius); 
+  // Make a copy for contours
+  auto contour68 = logLikelihoodDist;
+
+  for (unsigned xBin = 1; xBin <= contour68.GetXaxis()->GetNbins(); xBin++)
   {
-    // Log likelihood for this parameter set
-    double logLikelihood = ComputeLogLikelihood(voxel.X(), voxel.Y(), m_mlN0);
+    for (unsigned yBin = 1; yBin <= contour68.GetYaxis()->GetNbins(); yBin++)
+    {
+      // Log likelihood for this parameter set
+      float x(logLikelihoodDist.GetXaxis()->GetBinCenter(xBin));
+      float y(logLikelihoodDist.GetYaxis()->GetBinCenter(yBin));
+      double logLikelihood = ComputeLogLikelihood(x, y, m_mlN0);
 
-    unsigned xBin = likelihoodDist.GetXaxis()->FindBin(voxel.X());
-    unsigned yBin = likelihoodDist.GetXaxis()->FindBin(voxel.Y());
-    likelihoodDist.SetBinContent(xBin, yBin, TMath::Exp(logLikelihood));
+      float r(0), theta(0);
+      ConvertToPolar(r, theta, x, y);
+
+      float diff = -2*(logLikelihood - m_mlLogLikelihood);
+
+      // For plotting purposes
+      if (diff > 20.0) diff = 20;
+      if (r > (m_diskRadius-1)) diff = 0;
+  
+      logLikelihoodDist.SetBinContent(xBin, yBin, diff);
+      if (r > (m_diskRadius - 2)) diff = 20;
+      contour68.SetBinContent(xBin, yBin, diff);
+    }
   }  
-
+  
   // Make copies to draw our contours
-  auto contour68 = likelihoodDist;
-  auto contour90 = likelihoodDist;
-  auto contour95 = likelihoodDist;
+  auto contour90 = contour68;
+  auto contour95 = contour68;
 
   // Set the confidence levels
   Double_t level68[1], level90[1], level95[1];
-  double A = TMath::Exp(m_mlLogLikelihood);
-  level68[0] = A*TMath::Exp(-0.5*TMath::ChisquareQuantile(0.68,2));
-  level90[0] = A*TMath::Exp(-0.5*TMath::ChisquareQuantile(0.90,2));
-  level95[0] = A*TMath::Exp(-0.5*TMath::ChisquareQuantile(0.95,2));
+  level68[0] = TMath::ChisquareQuantile(0.68,3); // We had 3 d.o.f
+  level90[0] = TMath::ChisquareQuantile(0.90,3);
+  level95[0] = TMath::ChisquareQuantile(0.95,3);
   contour68.SetContour(1, level68);
   contour90.SetContour(1, level90);
   contour95.SetContour(1, level95);
 
   // Now draw the distribution and confidence regions
-  std::string name1 = "likelihood_CL_" + std::to_string(trigger);
+  std::string name1 = "logLikelihood_CL_" + std::to_string(trigger);
   TCanvas c1(name1.c_str(), name1.c_str(), 800, 800);
-  gStyle->SetOptStat(0);
-  likelihoodDist.Draw("colz");
+  logLikelihoodDist.Draw("colz");
 
-  contour68.SetLineWidth(4);
-  contour90.SetLineWidth(4);
-  contour95.SetLineWidth(4);
-  contour68.SetLineColor(2);
-  contour90.SetLineColor(5);
+  contour68.SetLineWidth(5);
+  contour90.SetLineWidth(5);
+  contour95.SetLineWidth(5);
+  contour68.SetLineColor(4);
+  contour90.SetLineColor(2);
   contour95.SetLineColor(3);
   contour68.Draw("cont3 same");
   contour90.Draw("cont3 same");
   contour95.Draw("cont3 same");
- 
+
   // Add a marker for the MLE
   TMarker xy(m_mlX, m_mlY, 20);
   xy.SetMarkerSize(2);
@@ -433,6 +454,9 @@ void Analyzer::MakePlot(const unsigned& trigger)
   leg1.AddEntry(&contour95, "95% CL", "l"); 
   leg1.AddEntry(&xy, "MLE Position", "p");
   leg1.Draw("same");
+  gStyle->SetPalette(53);
+  TColor::InvertPalette();
+  c1.Modified();
 
   c1.Update();
   c1.Write(); 

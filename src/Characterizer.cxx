@@ -347,7 +347,7 @@ void Characterizer::SaveCharacterizationPlots(const wheel::Configuration& config
   }
 
   // Write the plots to our output file
-  TFile f(config.characterizeOutputFile.c_str(), "RECREATE");
+  TFile f(config.characterizeOutputPath.c_str(), "RECREATE");
   masterAmpDist.Write();
   masterGainPlot.Write();
   bdPlots.Write();

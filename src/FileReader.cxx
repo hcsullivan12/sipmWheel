@@ -122,7 +122,7 @@ void FileReader::ReadFile(HitCandidateVec& hitCandidateVec, const std::string& f
     std::getline(file, yTemp, ',');
     counter++;
 
-    signal.push_back( -atof(yTemp.c_str()) );
+    signal.push_back( atof(yTemp.c_str()) );
   }
   
   // Analyze this waveform
@@ -143,7 +143,7 @@ void FileReader::Analyze(std::vector<float>&  signal,
                          const Configuration& config)
 {
   // Raw waveform: Only allow to store a few
-  if (config.saveRawWaveforms && channel == 1 && rawWaveforms.size() < 30)
+  if (config.saveRawWaveforms && rawWaveforms.size() < 30)
   {
     TGraph g(signal.size());
     g.SetNameTitle(filename.c_str(), filename.c_str());
@@ -170,7 +170,7 @@ void FileReader::Analyze(std::vector<float>&  signal,
   //waveformAlg.ApplyFits(hitCandVecFits, mergedHitsVec);
 
   // Modified waveform: Only allow to store a few
-  if (config.saveModWaveforms && channel == 1  && modWaveforms.size() < 30)
+  if (config.saveModWaveforms && modWaveforms.size() < 30)
   {
     TGraph g(signal.size());
     g.SetNameTitle(filename.c_str(), filename.c_str());
@@ -186,7 +186,7 @@ void FileReader::Analyze(std::vector<float>&  signal,
   // Append
   hitCandidateVec.insert(hitCandidateVec.end(), hitCandVec.begin(), hitCandVec.end());
   // Make the markers for the graphs
-  if (config.saveModWaveforms && channel == 1 && modWaveforms.size() <= 30) MakeTheMarkers(hitCandVec);
+  if (config.saveModWaveforms && modWaveforms.size() <= 30) MakeTheMarkers(hitCandVec);
 }
 
 /*
