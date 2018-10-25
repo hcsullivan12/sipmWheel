@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
 project(sipmwheel)
 
-add_definitions(-DVERSION="v01_00_01")
+add_definitions(-DVERSION="v01_00_02")
 
 set(CMAKE_CXX_STANDARD 11)
 
@@ -21,7 +21,10 @@ include_directories(${PROJECT_SOURCE_DIR}/include)
 
 file(GLOB_RECURSE sources ${PROJECT_SOURCE_DIR}/src/*.cxx)
 file(GLOB_RECURSE headers ${PROJECT_SOURCE_DIR}/include/*.h)
-add_executable(sipmwheel main.cxx ${sources} ${headers})
+add_executable(sipmwheel ${PROJECT_SOURCE_DIR}/bin/main.cxx ${sources} ${headers})
+add_executable(simulate ${PROJECT_SOURCE_DIR}/bin/firePhotons.cxx ${sources} ${headers})
 
 target_link_libraries(sipmwheel Spectrum)
 target_link_libraries(sipmwheel ${ROOT_LIBRARIES})
+target_link_libraries(simulate Spectrum)
+target_link_libraries(simulate ${ROOT_LIBRARIES})
