@@ -37,6 +37,7 @@ Simulator::Simulator(const Configuration& config)
   m_sourcePosition.push_back(config.sourcePosition[0]);
   m_sourcePosition.push_back(config.sourcePosition[1]);
   m_sourceSigma            = config.sourceSigma;
+  m_smearSigma             = config.smearSigma;
   m_tpbEmissionPeak        = config.tpbEmissionPeak;
   m_indexRefractionDisk    = config.indexRefractionDisk;
   m_indexRefractionEnv     = config.indexRefractionEnv;
@@ -89,13 +90,12 @@ void Simulator::Simulate()
   // Initialize sipms
   Initialize();
 
-  std::vector<float> stepsX, stepsY;
   std::vector<TGraph*> stepGraphs;
 
   // Commence emission!
   for (unsigned photonCounter = 1; photonCounter <= m_nPhotonsToLaunch; photonCounter++)
   {
-    // We should check the status after each stage
+    if (photonCounter%1000 == 0) std::cout << "Photon " << photonCounter << std::endl;
 
     // Initialize photon!
     Photon photon;
@@ -107,31 +107,61 @@ void Simulator::Simulate()
 
     photon.XSteps().push_back(photon.CurrentPosition()[0]);
     photon.YSteps().push_back(photon.CurrentPosition()[1]);
+    photon.ZSteps().push_back(photon.CurrentPosition()[2]);
 
     // Series of safety checks
-    auto pos = photon.CurrentPosition();
-    float r  = std::sqrt(pos[0]*pos[0] + pos[1]*pos[1]);
-    if (r > m_diskRadius) std::cout << "Error. Inital position greater than disk radius!\n";
-    pos = photon.NextPosition();
-    r = std::sqrt(pos[0]*pos[0] + pos[1]*pos[1]);
-    if (r > (m_diskRadius+0.001))         std::cout << "Error. Next r position > disk radius!\n";
-    if (pos[2] < (0-0.001))               std::cout << "Error. Next z position < 0!\n";
-    if (pos[2] > (m_diskThickness+0.001)) std::cout << "Error. Next z position > diskThickness!\n";
+    auto currentPos   = photon.CurrentPosition();
+    auto nextBoundary = photon.NextBoundary(); 
+    float rCurrent    = std::sqrt(currentPos[0]*currentPos[0] + currentPos[1]*currentPos[1]);
+    float rBoundary   = std::sqrt(nextBoundary[0]*nextBoundary[0] + nextBoundary[1]*nextBoundary[1]);
+    if (rCurrent        > (m_diskRadius+0.001))    std::cout << "Error. Inital position greater than disk radius!\n";
+    if (rBoundary       > (m_diskRadius+0.001))    std::cout << "Error. Next boundary position r > disk radius!\n";
+    if (nextBoundary[2] < (0-0.001))               std::cout << "Error. Next boundary position z < 0!\n";
+    if (nextBoundary[2] > (m_diskThickness+0.001)) std::cout << "Error. Next boundary position z > diskThickness!\n";
 
     // Begin tracing!
     // Be carful here!
     unsigned stepNumber(0);
     Step(photon, stepNumber);
+    if (stepNumber == 1) std::cout << "Photon weight = " << photon.Weight() << "  boundary = " << photon.Boundary() << std::endl;
     m_totalStepsHist.Fill(stepNumber);
 
-    stepsX = photon.XSteps();
-    stepsY = photon.YSteps();
+    auto stepsX = photon.XSteps();
+    auto stepsY = photon.YSteps();
+    auto stepsZ = photon.ZSteps();
+
+    // Make a TPolyLine for only one photon, for visualization purposes
+    if (photonCounter == 1)
+    {
+      TPolyLine3D polyLine(stepsX.size(), &stepsX[0], &stepsY[0], &stepsZ[0]);
+      TFile f(m_simulateOutputPath.c_str(), "RECREATE");
+      int LineBins = 100;
+      TPolyLine3D *l1 = 0;
+      TPolyLine3D *l2 = 0;
+      l1 = new TPolyLine3D(LineBins);
+      l2 = new TPolyLine3D(LineBins);
+      for (int e = 0; e < LineBins; ++e) 
+      {
+        Double_t Angle = e*2*TMath::Pi()/LineBins;
+        l1->SetPoint(e, m_diskRadius*TMath::Cos(Angle), m_diskRadius*TMath::Sin(Angle), 0);
+        l2->SetPoint(e, m_diskRadius*TMath::Cos(Angle), m_diskRadius*TMath::Sin(Angle), m_diskThickness);
+      }
+      l1->SetLineColor(2);
+      l2->SetLineColor(2);
+      TCanvas c1("3D Photon Tracker", "3D Photon Tracker", 800, 800);
+      l1->Draw("");
+      l2->Draw("same");
+      polyLine.Draw("l same");
+      c1.Write();
+      delete l1;
+      delete l2;
+    }
 
     if (photonCounter > 500) continue;
-
     stepGraphs.push_back(new TGraph(stepsX.size(), &stepsX[0], &stepsY[0]));
   }
 
+  HandleSiPMInfo();
   MakePlots(stepGraphs);
 }
 
@@ -153,6 +183,15 @@ void Simulator::Initialize()
     SiPM sipm(pos, m_sipmArea);
     m_sipmMap.emplace(sipmID, sipm);
   }
+}
+
+void Simulator::HandleSiPMInfo()
+{
+  for (const auto& sipm : m_sipmMap)
+  {
+    std::cout << "SiPM " << sipm.first << " captured " << sipm.second.TotalWeight() << " photons!\n";
+  }
+
 }
 
 void Simulator::ConvertToPolar(float& r, float& thetaDeg, const float& x, const float& y)
@@ -206,7 +245,7 @@ void Simulator::Emit(Photon& photon)
   std::vector<float> currentPos      = lastPos;
 
   // Assuming no interaction, where is the next surface?
-  CalculateNextPosition(photon, currentPos, unitMomentum); 
+  CalculateNextBoundary(photon, currentPos, unitMomentum); 
 
   // If this photon missed our disk, we missed it
   if (std::sqrt(currentPos[0]*currentPos[0] + currentPos[1]*currentPos[1]) >= m_diskRadius)
@@ -227,7 +266,7 @@ void Simulator::Emit(Photon& photon)
   m_intensityProfileHist.Fill(currentPos[0], currentPos[1]);
 }
 
-void Simulator::CalculateNextPosition(Photon& photon, const std::vector<float>& currentPos, const std::vector<float>& unitMomentum)
+void Simulator::CalculateNextBoundary(Photon& photon, const std::vector<float>& currentPos, const std::vector<float>& unitMomentum)
 { 
   // We have to check for the smallest epsilon > 0
   // Hitting bottom and top
@@ -251,16 +290,16 @@ void Simulator::CalculateNextPosition(Photon& photon, const std::vector<float>& 
   float stepEpsilon = *it;
 
   // Update
-  std::vector<float> nextPos(3,0);
-  nextPos[0] = currentPos[0] + stepEpsilon*unitMomentum[0]; 
-  nextPos[1] = currentPos[1] + stepEpsilon*unitMomentum[1]; 
-  nextPos[2] = currentPos[2] + stepEpsilon*unitMomentum[2]; 
-  photon.SetNextPosition(nextPos);
+  std::vector<float> nextBoundary(3,0);
+  nextBoundary[0] = currentPos[0] + stepEpsilon*unitMomentum[0]; 
+  nextBoundary[1] = currentPos[1] + stepEpsilon*unitMomentum[1]; 
+  nextBoundary[2] = currentPos[2] + stepEpsilon*unitMomentum[2]; 
+  photon.SetNextBoundary(nextBoundary);
 
   // What boundary is this?
-  float r = std::sqrt(nextPos[0]*nextPos[0] + nextPos[1]*nextPos[1]);
-  if ((m_diskRadius-0.001) < r && r < (m_diskRadius+0.001)) { photon.SetBoundary("side");   return; }
-  if ((0-0.001) < nextPos[2])                               { photon.SetBoundary("bottom"); return; }
+  float r = std::sqrt(nextBoundary[0]*nextBoundary[0] + nextBoundary[1]*nextBoundary[1]);
+  if ((m_diskRadius-0.001) < r    && r < (m_diskRadius+0.001))    { photon.SetBoundary("side");   return; }
+  if ((0-0.001) < nextBoundary[2] && nextBoundary[2] < (0+0.001)) { photon.SetBoundary("bottom"); return; }
   
   // Otherise
   photon.SetBoundary("top");
@@ -274,19 +313,47 @@ void Simulator::Step(Photon& photon, unsigned& stepNumber)
 
   // First: bulk propogation
   auto stepSize = m_stepGenerator.Exp(m_bulkAttenuation);
-  auto dist     = CalculateDistance(photon.CurrentPosition(), photon.NextPosition());  
+  // What's the distance to the next boundary?
+  auto distToBoundary = CalculateDistance(photon.CurrentPosition(), photon.NextBoundary());  
   m_stepHist.Fill(stepSize);
 
-  if (stepSize <= dist)
+  if (stepSize <= distToBoundary)
   {
+    // We're being absorbed!
     // Update the weight
-    photon.SetWeight(m_bulkAbsorption/m_bulkAttenuation);
+    float weight   = photon.Weight();
+    float lossFrac = weight*(m_bulkAbsorption/m_bulkAttenuation); 
+    weight = weight - lossFrac;
+    photon.SetWeight(weight);
+
+    // We have to step again!
+    // Find next position
+    std::vector<float> nextPos(3,0);
+    nextPos[0] = photon.CurrentPosition()[0] + stepSize*photon.UnitMomentum()[0];
+    nextPos[1] = photon.CurrentPosition()[1] + stepSize*photon.UnitMomentum()[1];
+    nextPos[2] = photon.CurrentPosition()[2] + stepSize*photon.UnitMomentum()[2];
+ 
+    // We're neglecting scattering, so we don't have to update the
+    // next boundary or unit momentum
+    photon.SetLastPosition(photon.CurrentPosition());
+    photon.SetCurrentPosition(nextPos);
+    
+    photon.XSteps().push_back(photon.CurrentPosition()[0]);
+    photon.YSteps().push_back(photon.CurrentPosition()[1]);
+    photon.ZSteps().push_back(photon.CurrentPosition()[2]);
+
+    // Step!
+    Step(photon, stepNumber);
+    return;
   }
+  //std::cout << "Boundary = " << photon.Boundary() << std::endl;
+  // We've hit a boundary!
   // Update current and last position
   photon.SetLastPosition(photon.CurrentPosition());
-  photon.SetCurrentPosition(photon.NextPosition());
+  photon.SetCurrentPosition(photon.NextBoundary());
   photon.XSteps().push_back(photon.CurrentPosition()[0]);
   photon.YSteps().push_back(photon.CurrentPosition()[1]);
+  photon.ZSteps().push_back(photon.CurrentPosition()[2]);
 
   // We are assuming here that the sipms are 
   // optically coupled to the disk, this way 
@@ -295,6 +362,7 @@ void Simulator::Step(Photon& photon, unsigned& stepNumber)
   Reflect(photon);
   photon.XSteps().push_back(photon.CurrentPosition()[0]);
   photon.YSteps().push_back(photon.CurrentPosition()[1]);
+  photon.ZSteps().push_back(photon.CurrentPosition()[2]);
 
   // Check the weight
   if (photon.Weight() < m_terminationThreshold) return;
@@ -309,7 +377,7 @@ bool Simulator::Captured(Photon& photon)
   // lies within the area of the sipm
   for (auto& sipmCount : m_sipmMap)
   {
-    auto sipm = sipmCount.second;
+    auto& sipm = sipmCount.second;
     // Define the area 
     float sideLength = std::sqrt(sipm.Area());
     float halfArc    = sideLength/2.0;
@@ -393,7 +461,7 @@ void Simulator::Reflect(Photon& photon)
   float sinSmear3 = TMath::Sin(smear3Deg*TMath::Pi()/180);
   float cosSmear3 = TMath::Cos(smear3Deg*TMath::Pi()/180);
 
-  auto surfaceUnitRot = surfaceUnit;
+  std::vector<float> surfaceUnitRot(3,0);
   surfaceUnitRot[0]   = cosSmear2*cosSmear3*surfaceUnit[0] - sinSmear3*cosSmear2*surfaceUnit[1] + sinSmear2*surfaceUnit[2];
   surfaceUnitRot[1]   = (sinSmear1*sinSmear2*cosSmear3 + cosSmear1*sinSmear3)*surfaceUnit[0] + 
                         (-sinSmear1*sinSmear2*sinSmear3 + cosSmear1*cosSmear3)*surfaceUnit[1] - sinSmear1*cosSmear2*surfaceUnit[2];
@@ -442,13 +510,13 @@ void Simulator::Reflect(Photon& photon)
   float weight = (1 - m_surfaceAbsorptionCoeff)*photon.Weight();
   photon.SetWeight(weight); 
  
-  // Assuming no interaction, what is the next position?
-  CalculateNextPosition(photon, photon.CurrentPosition(), photon.UnitMomentum()); 
+  // What is the next boundary?
+  CalculateNextBoundary(photon, photon.CurrentPosition(), photon.UnitMomentum()); 
 }
 
 void Simulator::MakePlots(std::vector<TGraph*> stepGraphs)
 {
-  TFile f(m_simulateOutputPath.c_str(), "RECREATE");
+  TFile f(m_simulateOutputPath.c_str(), "UPDATE");
 
   m_stepHist.Write();
   m_totalStepsHist.Write();

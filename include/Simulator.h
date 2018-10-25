@@ -16,6 +16,7 @@
 #include "TH1.h"
 #include "TH2.h"
 #include "TGraph.h"
+#include "TPolyLine3D.h"
 
 namespace wheel {
 
@@ -29,29 +30,30 @@ public:
                     const std::vector<float>& unitMomentum, 
                     const std::vector<float>& lastPos,
                     const std::vector<float>& currentPos,
-                    const std::vector<float>& nextPos) 
+                    const std::vector<float>& nextBoundary) 
  {
    m_weight          = weight;
    m_unitMomentum    = unitMomentum;
    m_lastPosition    = lastPos;
    m_currentPosition = currentPos; 
-   m_nextPosition    = nextPos;
+   m_nextBoundary    = nextBoundary;
  };
 
   void SetWeight(const double& w)                        { m_weight          = w; };
   void SetCurrentPosition(const std::vector<float>& pos) { m_currentPosition = pos; };
   void SetLastPosition(const std::vector<float>& pos)    { m_lastPosition    = pos; };
-  void SetNextPosition(const std::vector<float>& pos)    { m_nextPosition    = pos; };
+  void SetNextBoundary(const std::vector<float>& pos)    { m_nextBoundary    = pos; };
   void SetUnitMomentum(const std::vector<float>& pos)    { m_unitMomentum    = pos; };
   void SetBoundary(const std::string& b)                 { m_boundary        = b; };
 
   std::vector<float> CurrentPosition() const { return m_currentPosition; };
-  std::vector<float> NextPosition()    const { return m_nextPosition; };
+  std::vector<float> NextBoundary()    const { return m_nextBoundary; };
   std::vector<float> UnitMomentum()    const { return m_unitMomentum; };
   double             Weight()          const { return m_weight; };
   std::string        Boundary()        const { return m_boundary; };
   std::vector<float>& XSteps()               { return m_xSteps; };
   std::vector<float>& YSteps()               { return m_ySteps; };
+  std::vector<float>& ZSteps()               { return m_zSteps; };
 
 private:
   
@@ -59,10 +61,11 @@ private:
   std::vector<float> m_unitMomentum;           ///< Momentum unit vector (cartesian)
   std::vector<float> m_lastPosition;           ///< Position at last step (x,y,z)
   std::vector<float> m_currentPosition;        ///< Position at current step (x,y,z)
-  std::vector<float> m_nextPosition;           ///< Next projected position
+  std::vector<float> m_nextBoundary;           ///< Next projected boundary position
   std::string        m_boundary;               ///< Current boundary (side, top, bottom)
   std::vector<float> m_xSteps;                 ///< History of steps X coordinate
   std::vector<float> m_ySteps;                 ///< History of steps Y coordinate
+  std::vector<float> m_zSteps;                 ///< History of steps Z coordinate
 };
 
 class SiPM {
@@ -99,12 +102,13 @@ private:
   void  ConvertToPolar(float& r, float& thetaDeg, const float& x, const float& y);
   void  ConvertToCartesian(float& x, float& y, const float& r, const float& thetaDeg); 
   void  Emit(Photon& photon);
-  void  CalculateNextPosition(Photon& photon, const std::vector<float>& currentPos, const std::vector<float>& unitMomentumVec);
+  void  CalculateNextBoundary(Photon& photon, const std::vector<float>& currentPos, const std::vector<float>& unitMomentumVec);
   float CalculateDistance(const std::vector<float>& currentPos, const std::vector<float>& nextPos);
   void  Step(Photon& photon, unsigned& stepNumber);
   void  Reflect(Photon& photon); 
   bool  Captured(Photon& photon);
   void  MakePlots(std::vector<TGraph*> stepGraphs);
+  void  HandleSiPMInfo();
  
   std::string              m_simulateOutputPath;     ///< Output path for results
   unsigned                 m_nSiPMs;                 ///< Number of sipms
