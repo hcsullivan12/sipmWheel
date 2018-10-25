@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
 project(sipmwheel)
 
-add_definitions(-DVERSION="v01_00_02")
+add_definitions(-DVERSION="v01_00_03")
 
 set(CMAKE_CXX_STANDARD 11)
 
