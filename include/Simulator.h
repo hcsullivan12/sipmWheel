@@ -80,7 +80,6 @@ public:
 
   void SetTotalWeight(const double& w) { m_totalWeight = w; };
 
-
 private:
 
   double             m_totalWeight;            ///< Sum of weights 

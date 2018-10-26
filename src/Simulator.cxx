@@ -3,7 +3,7 @@
 //
 // Author: Hunter Sullivan
 //
-// Discription: Structure to simulate photon propogation in sipmewheel.
+// Discription: Structure to simulate photon propogation in sipmwheel.
 //
 
 #include "Simulator.h"
@@ -123,9 +123,8 @@ void Simulator::Simulate()
     // Be carful here!
     unsigned stepNumber(0);
     Step(photon, stepNumber);
-    if (stepNumber == 1) std::cout << "Photon weight = " << photon.Weight() << "  boundary = " << photon.Boundary() << std::endl;
     m_totalStepsHist.Fill(stepNumber);
-
+    
     auto stepsX = photon.XSteps();
     auto stepsY = photon.YSteps();
     auto stepsZ = photon.ZSteps();
@@ -181,6 +180,7 @@ void Simulator::Initialize()
     std::vector<float> pos = {r, thetaDeg, m_diskThickness/2};
 
     SiPM sipm(pos, m_sipmArea);
+    sipm.SetTotalWeight(0.0);
     m_sipmMap.emplace(sipmID, sipm);
   }
 }
@@ -191,7 +191,6 @@ void Simulator::HandleSiPMInfo()
   {
     std::cout << "SiPM " << sipm.first << " captured " << sipm.second.TotalWeight() << " photons!\n";
   }
-
 }
 
 void Simulator::ConvertToPolar(float& r, float& thetaDeg, const float& x, const float& y)
@@ -311,7 +310,7 @@ void Simulator::Step(Photon& photon, unsigned& stepNumber)
   if (Captured(photon)) return;
   stepNumber++;
 
-  // First: bulk propogation
+  // First bulk propogation
   auto stepSize = m_stepGenerator.Exp(m_bulkAttenuation);
   // What's the distance to the next boundary?
   auto distToBoundary = CalculateDistance(photon.CurrentPosition(), photon.NextBoundary());  
@@ -346,7 +345,7 @@ void Simulator::Step(Photon& photon, unsigned& stepNumber)
     Step(photon, stepNumber);
     return;
   }
-  //std::cout << "Boundary = " << photon.Boundary() << std::endl;
+
   // We've hit a boundary!
   // Update current and last position
   photon.SetLastPosition(photon.CurrentPosition());
@@ -360,6 +359,7 @@ void Simulator::Step(Photon& photon, unsigned& stepNumber)
   // we don't have to worry about transmission.
   // Handle reflection
   Reflect(photon);
+
   photon.XSteps().push_back(photon.CurrentPosition()[0]);
   photon.YSteps().push_back(photon.CurrentPosition()[1]);
   photon.ZSteps().push_back(photon.CurrentPosition()[2]);
@@ -386,21 +386,45 @@ bool Simulator::Captured(Photon& photon)
     float rEpsilon = 0.001;
     std::vector<float> rLimits        = {sipm.Position()[0]-rEpsilon,  sipm.Position()[0]+rEpsilon};
     std::vector<float> thetaLimitsDeg = {sipm.Position()[1]-dAlphaDeg, sipm.Position()[1]+dAlphaDeg};
-   
+       
     // Convert the photon's position to polar
     float pR(0), pThetaDeg(0);
     ConvertToPolar(pR, pThetaDeg, photon.CurrentPosition()[0], photon.CurrentPosition()[1]);
-    
-    // Check if this sipm captured our photon
-    if (rLimits[0] < pR && pR < rLimits[1]) 
+    // Subtlety here! Theta goes 0-360 > 0!
+    // If sipm1, thetaLimitsDeg[0] < 0
+    // Maybe not the best solution here, but we should handle sipm1 seperately
+    if (sipmCount.first == 1) 
     {
-      if (thetaLimitsDeg[0] < pThetaDeg && pThetaDeg < thetaLimitsDeg[1])
+      // Check if this sipm captured our photon
+      if (rLimits[0] < pR && pR < rLimits[1])
       {
-        // Captured!
-        float sipmWeight = sipm.TotalWeight();
-        sipm.SetTotalWeight(sipmWeight + photon.Weight());
-        photon.SetWeight(0);
-        return true;
+        thetaLimitsDeg[0] = thetaLimitsDeg[0] + 360;
+        if (thetaLimitsDeg[0] < pThetaDeg || pThetaDeg < thetaLimitsDeg[1])
+        {
+          // Captured!
+          float sipmWeight = sipm.TotalWeight();
+          std::cout << "SiPM " << sipmCount.first << "  " << sipmWeight << std::endl;
+          sipm.SetTotalWeight(sipmWeight + photon.Weight());
+          photon.SetWeight(0);
+          return true;
+        }
+      }
+    }
+    else 
+    {
+      if (thetaLimitsDeg[0] < 0) std::cout << "ERROR!\n";
+      // Check if this sipm captured our photon
+      if (rLimits[0] < pR && pR < rLimits[1]) 
+      {
+        if (thetaLimitsDeg[0] < pThetaDeg && pThetaDeg < thetaLimitsDeg[1])
+        {
+          // Captured!
+          float sipmWeight = sipm.TotalWeight();
+          std::cout << "SiPM " << sipmCount.first << "  " << sipmWeight << std::endl;
+          sipm.SetTotalWeight(sipmWeight + photon.Weight());
+          photon.SetWeight(0);
+          return true;
+        }
       }
     }
   }
