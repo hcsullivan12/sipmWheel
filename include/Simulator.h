@@ -108,6 +108,8 @@ private:
   bool  Captured(Photon& photon);
   void  MakePlots(std::vector<TGraph*> stepGraphs);
   void  HandleSiPMInfo();
+  float CalculateR(const std::vector<float>& pos);
+
  
   std::string              m_simulateOutputPath;     ///< Output path for results
   unsigned                 m_nSiPMs;                 ///< Number of sipms
@@ -129,6 +131,7 @@ private:
   TH1F                     m_stepHist;               ///< Histogram of steps
   TH2F                     m_intensityProfileHist;   ///< Histogram for intensity profile
   TH1F                     m_totalStepsHist;         ///< Hitsogram for total steps
+  TH2F                     m_depositionHist;         ///< Deposition histogram
   TRandom                  m_stepGenerator;          ///< Step generator
   TRandom                  m_rGenerator;             ///< Used for intensity profile
   TRandom                  m_phiGenerator;           ///< Used for intensity profile

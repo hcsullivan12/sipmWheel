@@ -60,6 +60,8 @@ Simulator::Simulator(const Configuration& config)
   m_intensityProfileHist.SetBins(500, -m_diskRadius-1, m_diskRadius+1, 500, -m_diskRadius-1, m_diskRadius+1);
   m_totalStepsHist.SetName("Total Steps");
   m_totalStepsHist.SetBins(500, 0, 1000);
+  m_depositionHist.SetName("E Deposition");
+  m_depositionHist.SetBins(102, -m_diskRadius-1, m_diskRadius+1, 102, -m_diskRadius-1, m_diskRadius+1); 
 }
 
 Simulator::~Simulator()
@@ -93,6 +95,7 @@ void Simulator::Simulate()
   std::vector<TGraph*> stepGraphs;
 
   // Commence emission!
+  clock_t start = clock();
   for (unsigned photonCounter = 1; photonCounter <= m_nPhotonsToLaunch; photonCounter++)
   {
     if (photonCounter%1000 == 0) std::cout << "Photon " << photonCounter << std::endl;
@@ -103,7 +106,7 @@ void Simulator::Simulate()
     // Emit!
     Emit(photon);
     // If it missed the disk
-    if (photon.Weight() < m_terminationThreshold)  continue;
+    if (photon.Weight() < m_terminationThreshold) continue;
 
     photon.XSteps().push_back(photon.CurrentPosition()[0]);
     photon.YSteps().push_back(photon.CurrentPosition()[1]);
@@ -114,10 +117,10 @@ void Simulator::Simulate()
     auto nextBoundary = photon.NextBoundary(); 
     float rCurrent    = std::sqrt(currentPos[0]*currentPos[0] + currentPos[1]*currentPos[1]);
     float rBoundary   = std::sqrt(nextBoundary[0]*nextBoundary[0] + nextBoundary[1]*nextBoundary[1]);
-    if (rCurrent        > (m_diskRadius+0.001))    std::cout << "Error. Inital position greater than disk radius!\n";
-    if (rBoundary       > (m_diskRadius+0.001))    std::cout << "Error. Next boundary position r > disk radius!\n";
-    if (nextBoundary[2] < (0-0.001))               std::cout << "Error. Next boundary position z < 0!\n";
-    if (nextBoundary[2] > (m_diskThickness+0.001)) std::cout << "Error. Next boundary position z > diskThickness!\n";
+    if (rCurrent        > (m_diskRadius+0.0001))    std::cout << "Error. Inital position greater than disk radius!\n";
+    if (rBoundary       > (m_diskRadius+0.0001))    std::cout << "Error. Next boundary position r > disk radius!\n";
+    if (nextBoundary[2] < (0-0.0001))               std::cout << "Error. Next boundary position z < 0!\n";
+    if (nextBoundary[2] > (m_diskThickness+0.0001)) std::cout << "Error. Next boundary position z > diskThickness!\n";
 
     // Begin tracing!
     // Be carful here!
@@ -160,6 +163,11 @@ void Simulator::Simulate()
     stepGraphs.push_back(new TGraph(stepsX.size(), &stepsX[0], &stepsY[0]));
   }
 
+  clock_t end = clock();
+  double duration = ((double)(end - start))/CLOCKS_PER_SEC;
+
+  std::cout << "Run time of " << duration << " s" << std::endl;
+
   HandleSiPMInfo();
   MakePlots(stepGraphs);
 }
@@ -187,10 +195,22 @@ void Simulator::Initialize()
 
 void Simulator::HandleSiPMInfo()
 {
+  TCanvas c("LightYield", "Light Yield", 800, 800);
+  c.SetTheta(90);
+  c.SetPhi(0);
+
+  TH2D* h = new TH2D("h", "h", 2*8, 0, 360, 20, 0, 20);
+      
   for (const auto& sipm : m_sipmMap)
   {
     std::cout << "SiPM " << sipm.first << " captured " << sipm.second.TotalWeight() << " photons!\n";
+    h->SetBinContent(2*(sipm.first -1) +1, m_diskRadius, sipm.second.TotalWeight());
   }
+
+  h->Draw("lego2 pol");
+  c.Update();
+  TFile f(m_simulateOutputPath.c_str(), "UPDATE");
+  c.Write();
 }
 
 void Simulator::ConvertToPolar(float& r, float& thetaDeg, const float& x, const float& y)
@@ -247,7 +267,7 @@ void Simulator::Emit(Photon& photon)
   CalculateNextBoundary(photon, currentPos, unitMomentum); 
 
   // If this photon missed our disk, we missed it
-  if (std::sqrt(currentPos[0]*currentPos[0] + currentPos[1]*currentPos[1]) >= m_diskRadius)
+  if (std::sqrt(currentPos[0]*currentPos[0] + currentPos[1]*currentPos[1]) > (m_diskRadius-0.01))
   {
     photon.SetWeight(0);
     photon.SetUnitMomentum(unitMomentum);
@@ -293,10 +313,25 @@ void Simulator::CalculateNextBoundary(Photon& photon, const std::vector<float>& 
   nextBoundary[0] = currentPos[0] + stepEpsilon*unitMomentum[0]; 
   nextBoundary[1] = currentPos[1] + stepEpsilon*unitMomentum[1]; 
   nextBoundary[2] = currentPos[2] + stepEpsilon*unitMomentum[2]; 
+
+  // Handle floating point errors
+  float r = CalculateR(nextBoundary);
+  float eps = -0.001;
+  while (r > (m_diskRadius-0.01))
+  {
+    nextBoundary[0] = currentPos[0] + (stepEpsilon+eps)*unitMomentum[0];
+    nextBoundary[1] = currentPos[1] + (stepEpsilon+eps)*unitMomentum[1];
+    nextBoundary[2] = currentPos[2] + (stepEpsilon+eps)*unitMomentum[2];
+    eps = eps - 0.001;
+    r = CalculateR(nextBoundary);
+  } 
+
+  if (r > (m_diskRadius+0.01)) std::cout << "HOLDUP50\n"; 
+
+  // Set the next boundary
   photon.SetNextBoundary(nextBoundary);
 
   // What boundary is this?
-  float r = std::sqrt(nextBoundary[0]*nextBoundary[0] + nextBoundary[1]*nextBoundary[1]);
   if ((m_diskRadius-0.001) < r    && r < (m_diskRadius+0.001))    { photon.SetBoundary("side");   return; }
   if ((0-0.001) < nextBoundary[2] && nextBoundary[2] < (0+0.001)) { photon.SetBoundary("bottom"); return; }
   
@@ -316,8 +351,12 @@ void Simulator::Step(Photon& photon, unsigned& stepNumber)
   auto distToBoundary = CalculateDistance(photon.CurrentPosition(), photon.NextBoundary());  
   m_stepHist.Fill(stepSize);
 
+  float temp3 = CalculateR(photon.CurrentPosition());
+  if (temp3 > (m_diskRadius+0.001)) std::cout << "HOLDUP30 " << temp3 << "\n";
+
   if (stepSize <= distToBoundary)
   {
+    //std::cout << "\n\nHERE\n";
     // We're being absorbed!
     // Update the weight
     float weight   = photon.Weight();
@@ -336,6 +375,14 @@ void Simulator::Step(Photon& photon, unsigned& stepNumber)
     // next boundary or unit momentum
     photon.SetLastPosition(photon.CurrentPosition());
     photon.SetCurrentPosition(nextPos);
+ 
+    // Update our deposition plot
+    float temp = CalculateR(photon.CurrentPosition());
+    if (temp > (m_diskRadius-0.001)) std::cout << "HOLDUP10 " << temp << "\n";
+    auto xBin = m_depositionHist.GetXaxis()->FindBin(photon.CurrentPosition()[0]);
+    auto yBin = m_depositionHist.GetYaxis()->FindBin(photon.CurrentPosition()[1]);
+    auto cont = m_depositionHist.GetBinContent(xBin, yBin);
+    m_depositionHist.SetBinContent(xBin, yBin, cont + lossFrac);
     
     photon.XSteps().push_back(photon.CurrentPosition()[0]);
     photon.YSteps().push_back(photon.CurrentPosition()[1]);
@@ -358,6 +405,8 @@ void Simulator::Step(Photon& photon, unsigned& stepNumber)
   // optically coupled to the disk, this way 
   // we don't have to worry about transmission.
   // Handle reflection
+  float temp = CalculateR(photon.CurrentPosition());
+  if (temp > (m_diskRadius+0.001)) std::cout << "HOLDUP20 " << temp << "\n";
   Reflect(photon);
 
   photon.XSteps().push_back(photon.CurrentPosition()[0]);
@@ -365,7 +414,8 @@ void Simulator::Step(Photon& photon, unsigned& stepNumber)
   photon.ZSteps().push_back(photon.CurrentPosition()[2]);
 
   // Check the weight
-  if (photon.Weight() < m_terminationThreshold) return;
+  // Safety
+  if (photon.Weight() < m_terminationThreshold) { photon.SetWeight(0.0); return; }
 
   // Recursive call
   Step(photon, stepNumber);
@@ -383,7 +433,7 @@ bool Simulator::Captured(Photon& photon)
     float halfArc    = sideLength/2.0;
     float dAlphaDeg  = (halfArc/sipm.Position()[0])*180.0/TMath::Pi();
 
-    float rEpsilon = 0.001;
+    float rEpsilon = 0.05;
     std::vector<float> rLimits        = {sipm.Position()[0]-rEpsilon,  sipm.Position()[0]+rEpsilon};
     std::vector<float> thetaLimitsDeg = {sipm.Position()[1]-dAlphaDeg, sipm.Position()[1]+dAlphaDeg};
        
@@ -403,9 +453,19 @@ bool Simulator::Captured(Photon& photon)
         {
           // Captured!
           float sipmWeight = sipm.TotalWeight();
-          std::cout << "SiPM " << sipmCount.first << "  " << sipmWeight << std::endl;
+          //std::cout << "SiPM " << sipmCount.first << "  " << sipmWeight << std::endl;
           sipm.SetTotalWeight(sipmWeight + photon.Weight());
           photon.SetWeight(0);
+
+          // Update our deposition plot
+          float temp = CalculateR(photon.CurrentPosition());
+          if (temp > (m_diskRadius+0.001)) std::cout << "HOLDUP2 " << temp << "\n";
+
+          auto xBin = m_depositionHist.GetXaxis()->FindBin(photon.CurrentPosition()[0]);
+          auto yBin = m_depositionHist.GetYaxis()->FindBin(photon.CurrentPosition()[1]);
+          auto cont = m_depositionHist.GetBinContent(xBin, yBin);
+          m_depositionHist.SetBinContent(xBin, yBin, cont + sipm.TotalWeight() - sipmWeight);
+
           return true;
         }
       }
@@ -420,9 +480,19 @@ bool Simulator::Captured(Photon& photon)
         {
           // Captured!
           float sipmWeight = sipm.TotalWeight();
-          std::cout << "SiPM " << sipmCount.first << "  " << sipmWeight << std::endl;
+          //std::cout << "SiPM " << sipmCount.first << "  " << sipmWeight << std::endl;
           sipm.SetTotalWeight(sipmWeight + photon.Weight());
           photon.SetWeight(0);
+
+          // Update our deposition plot
+          float temp = CalculateR(photon.CurrentPosition());
+          if (temp > (m_diskRadius+0.001)) std::cout << "HOLDUP3 " << temp << "\n";
+
+          auto xBin = m_depositionHist.GetXaxis()->FindBin(photon.CurrentPosition()[0]);
+          auto yBin = m_depositionHist.GetYaxis()->FindBin(photon.CurrentPosition()[1]);
+          auto cont = m_depositionHist.GetBinContent(xBin, yBin);
+          m_depositionHist.SetBinContent(xBin, yBin, cont + sipm.TotalWeight() - sipmWeight);
+
           return true;
         }
       }
@@ -464,6 +534,8 @@ void Simulator::Reflect(Photon& photon)
   if (photon.Boundary() == "top")    unitVec = {0, 0,-1};
   if (photon.Boundary() == "bottom") unitVec = {0, 0, 1};
   if (photon.Boundary() == "side")   unitVec = {-photon.CurrentPosition()[0], -photon.CurrentPosition()[1], 0};
+  float temp1 = CalculateR(photon.CurrentPosition());
+  if (temp1 > (m_diskRadius+0.001)) std::cout << "HOLDUP15 " << temp1 << "\n";
 
   // Normalize
   float mag = std::sqrt(unitVec[0]*unitVec[0] + unitVec[1]*unitVec[1] + unitVec[2]*unitVec[2]);
@@ -524,18 +596,41 @@ void Simulator::Reflect(Photon& photon)
 
     // Take the average
     float R = 0.5*(R_S + R_P);
+    std::cout << R << std::endl;
 
     float weight = photon.Weight();
     photon.SetWeight(R*weight);
+    
+    // E deposition
+    auto xBin = m_depositionHist.GetXaxis()->FindBin(photon.CurrentPosition()[0]);
+    auto yBin = m_depositionHist.GetYaxis()->FindBin(photon.CurrentPosition()[1]);
+    auto cont = m_depositionHist.GetBinContent(xBin, yBin);
+    m_depositionHist.SetBinContent(xBin, yBin, cont + (1-R)*weight);
+
+    if (photon.Weight() < m_terminationThreshold) { photon.SetWeight(0.0); return; }
   }
 
   // 2)
   // This occurs for every photon
+  // Update our deposition plot
+  float temp = CalculateR(photon.CurrentPosition()); 
+  if (temp > (m_diskRadius+0.001)) std::cout << "HOLDUP1 " << temp << "\n";
+
+  auto xBin = m_depositionHist.GetXaxis()->FindBin(photon.CurrentPosition()[0]);
+  auto yBin = m_depositionHist.GetYaxis()->FindBin(photon.CurrentPosition()[1]);
+  auto cont = m_depositionHist.GetBinContent(xBin, yBin);
+  m_depositionHist.SetBinContent(xBin, yBin, cont + m_surfaceAbsorptionCoeff*photon.Weight());
+ 
   float weight = (1 - m_surfaceAbsorptionCoeff)*photon.Weight();
   photon.SetWeight(weight); 
  
   // What is the next boundary?
   CalculateNextBoundary(photon, photon.CurrentPosition(), photon.UnitMomentum()); 
+}
+
+float Simulator::CalculateR(const std::vector<float>& pos)
+{
+  return std::sqrt(pos[0]*pos[0] + pos[1]*pos[1]);
 }
 
 void Simulator::MakePlots(std::vector<TGraph*> stepGraphs)
@@ -562,5 +657,7 @@ void Simulator::MakePlots(std::vector<TGraph*> stepGraphs)
     stepGraphs[g]->Draw("same");
   }
   c2.Write();
+
+  m_depositionHist.Write();
 }
 }
