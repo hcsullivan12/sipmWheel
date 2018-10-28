@@ -596,7 +596,7 @@ void Simulator::Reflect(Photon& photon)
 
     // Take the average
     float R = 0.5*(R_S + R_P);
-    std::cout << R << std::endl;
+    //std::cout << R << std::endl;
 
     float weight = photon.Weight();
     photon.SetWeight(R*weight);
