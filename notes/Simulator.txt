@@ -1,0 +1,17 @@
+// Update
+  std::vector<float> nextBoundary(3,0);
+  float inc(0.001);
+  float r = std::sqrt(nextBoundary[0]*nextBoundary[0] + nextBoundary[1]*nextBoundary[1]);
+  while( (m_diskRadius-0.001) > r    && 
+         nextBoundary[2] > (0+0.001) &&
+         (m_diskThickness-0.001) > nextBoundary[2] )
+
+  { 
+    r = std::sqrt(nextBoundary[0]*nextBoundary[0] + nextBoundary[1]*nextBoundary[1]);
+    std::cout << r << " " << nextBoundary[2] << std::endl; 
+    nextBoundary[0] = currentPos[0] + (stepEpsilon+inc)*unitMomentum[0]; 
+    nextBoundary[1] = currentPos[1] + (stepEpsilon+inc)*unitMomentum[1]; 
+    nextBoundary[2] = currentPos[2] + (stepEpsilon+inc)*unitMomentum[2]; 
+    inc = inc + 0.001;
+  }
+
