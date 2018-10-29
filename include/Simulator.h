@@ -77,14 +77,17 @@ public:
   const float              Area()        const { return m_area; };
   const std::vector<float> Position()    const { return m_position; }; 
   const double             TotalWeight() const { return m_totalWeight; };
+  const unsigned           NPhotons()    const { return m_pe; };
 
   void SetTotalWeight(const double& w) { m_totalWeight = w; };
+  void SetNPhotons(const unsigned& pe) { m_pe          = pe; };
 
 private:
 
   double             m_totalWeight;            ///< Sum of weights 
   std::vector<float> m_position;               ///< Position (r, thetaDeg, z)
   float              m_area;                   ///< Active area of sipm
+  unsigned           m_pe;                     ///< Number of p.e. 
 };
 
 class Simulator {
@@ -93,7 +96,7 @@ public:
   Simulator(const Configuration& config);
   ~Simulator();
 
-  void Simulate();
+  void Simulate(const Configuration& config);
    
 private:
 
@@ -113,6 +116,8 @@ private:
  
   std::string              m_simulateOutputPath;     ///< Output path for results
   unsigned                 m_nSiPMs;                 ///< Number of sipms
+  unsigned                 m_N0;                     ///< N p.e. constant for reco
+  bool                     m_reconstruct;            ///< Option to reconstruct
   float                    m_sipmArea;               ///< Active area of sipm
   unsigned                 m_nPhotonsToLaunch;       ///< Number of photons to launch
   float                    m_diskRadius;             ///< Disk radius
@@ -123,6 +128,8 @@ private:
   float                    m_tpbEmissionPeak;        ///< TPB emission peak (nm)
   float                    m_indexRefractionDisk;    ///< Index of refraction of disk
   float                    m_indexRefractionEnv;     ///< Index of refraction of sorrounding environment
+  float                    m_permittivityDisk;       ///< Permittivity of disk
+  float                    m_permittivityEnv;        ///< Permittivity of environment
   double                   m_terminationThreshold;   ///< Termination threshold
   float                    m_surfaceAbsorptionCoeff; ///< Surface absorption coeffecient (0 < s < 1)
   float                    m_bulkAttenuation;        ///< Bulk attenuation length

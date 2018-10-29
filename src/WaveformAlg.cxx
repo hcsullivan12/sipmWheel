@@ -246,7 +246,7 @@ void WaveformAlg::FindHitCandidates(std::vector<float>::const_iterator startItr,
     // Hit threshold
     float hitThreshold = std::max( noiseParameters[2], config.minimumHitAmp ); 
 
-    //std::cout << noiseParameters.second << "  " << config.minimumHitAmp << "  " << maxValue << std::endl;
+   // std::cout << noiseParameters[1] << "  " << config.minimumHitAmp << "  " << maxValue << std::endl;
 
     if (maxValue > hitThreshold)
     {
@@ -373,6 +373,13 @@ std::vector<float> WaveformAlg::ComputeNoise(std::vector<float>& signal, const C
   float baselineInter = fint.GetMinimumX();
   float p1 = gauss.GetParameter(1);
   float p2 = gauss.GetParameter(2);
+
+  // subtract baseline
+  if (config.baselineSubtract)
+  {
+    for (auto& amp : signal) amp = amp - p1;
+  }
+
   std::vector<float> vec = {p1, p2, baselineInter};
   return vec;
 }

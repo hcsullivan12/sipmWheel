@@ -52,11 +52,12 @@ public:
   ~Analyzer();
   
   void  Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const Configuration& config, const unsigned& trigger);
-  void  Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const unsigned& trigger);
+  void  Reconstruct(unsigned& N0);
+  void  SetData(const std::map<unsigned, unsigned>& data) { m_data = data; };
+  void  Initialize(const Configuration& config);
     
 private:
 
-  void     Initialize(const Configuration& config);
   std::pair<unsigned, unsigned> InitData(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const unsigned& trigger);
   double   ComputeLogLikelihood(const float& x, const float& y, const unsigned& N0);
   float    ComputeLambda(const float& r, const float& theta, const unsigned& N0, const unsigned& m);
