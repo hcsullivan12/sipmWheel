@@ -103,11 +103,15 @@ struct Configuration
   float                     tpbEmissionPeak;           ///< TPB emission peak wavelength (nm)
   float                     indexRefractionDisk;       ///< Index of refraction for the disk
   float                     indexRefractionEnv;        ///< Index of refraction for the sorrounding environment
+  float                     permittivityDisk;          ///< Permittivity of disk, used for reflection coeffecient
+  float                     permittivityEnv;           ///< Permittivity of sorrounding environment
   unsigned                  nPhotonsToLaunch;          ///< Number of photons to simulate
   float                     terminationThreshold;      ///< Threshold for photon termination
   float                     bulkAttenuation;           ///< Bulk attenuation length
   float                     bulkAbsorption;            ///< Bulk absorption length
   float                     surfaceAbsorptionCoeff;    ///< Surface absorption coeffecient
+  unsigned                  N0;                        ///< N p.e. constant for reco
+  bool                      reconstruct;               ///< Option to run reconstruction
 };
 }
 

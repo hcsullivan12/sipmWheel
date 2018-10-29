@@ -145,6 +145,8 @@ TGraphErrors Characterizer::FitGain(TH1D& hs, const unsigned& sipm, const unsign
   grpeaks.Fit(&fit, "QR");
   gStyle->SetOptFit();
 
+  std::cout << "sipm = " << sipm << "  nBias = " << nBias << "  " << fit.GetParameter(1) << std::endl;
+
   // Save this gain
   std::vector<float> info;
   m_sipmGains[sipm-1][nBias][0] = fit.GetParameter(1);
