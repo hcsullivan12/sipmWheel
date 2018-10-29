@@ -11,6 +11,7 @@
 #include "TFile.h"
 #include "TCanvas.h"
 #include "TF2.h"
+#include "Analyzer.h"
 
 namespace wheel {
 
@@ -32,6 +33,8 @@ Simulator::Simulator(const Configuration& config)
   // So we don't have to keep passing config
   m_simulateOutputPath     = config.simulateOutputPath;
   m_nSiPMs                 = config.nSiPMs;
+  m_N0                     = config.N0;
+  m_reconstruct            = config.reconstruct;
   m_diskRadius             = config.diskRadius;
   m_diskThickness          = config.diskThickness;
   m_sourcePosition.push_back(config.sourcePosition[0]);
@@ -41,6 +44,8 @@ Simulator::Simulator(const Configuration& config)
   m_tpbEmissionPeak        = config.tpbEmissionPeak;
   m_indexRefractionDisk    = config.indexRefractionDisk;
   m_indexRefractionEnv     = config.indexRefractionEnv;
+  m_permittivityDisk       = config.permittivityDisk;
+  m_permittivityEnv        = config.permittivityEnv;
   m_nPhotonsToLaunch       = config.nPhotonsToLaunch;
   m_terminationThreshold   = config.terminationThreshold;
   m_sipmArea               = config.sipmArea;
@@ -67,7 +72,7 @@ Simulator::Simulator(const Configuration& config)
 Simulator::~Simulator()
 {}
 
-void Simulator::Simulate()
+void Simulator::Simulate(const Configuration& config)
 {
   // **Steps for this algorithm**
   //
@@ -166,10 +171,33 @@ void Simulator::Simulate()
   clock_t end = clock();
   double duration = ((double)(end - start))/CLOCKS_PER_SEC;
 
-  std::cout << "Run time of " << duration << " s" << std::endl;
+  std::cout << "\nSimulation run time of " << duration << " s\n" << std::endl;
 
   HandleSiPMInfo();
   MakePlots(stepGraphs);
+
+  // Now reconstruction
+  if (m_reconstruct)
+  {
+    std::cout << "\nInitializing reconstruction...\n";
+
+    // First we need to fill the data
+    std::map<unsigned, unsigned> data;
+    unsigned max(0);
+    for (unsigned sipm = 1; sipm <= m_nSiPMs; sipm++)
+    {
+      unsigned nPE = m_sipmMap.find(sipm)->second.NPhotons();
+      if (nPE > max) max = nPE;
+      data.emplace(sipm, nPE);
+      std::cout << "SIPM " << sipm << " --> " << nPE << std::endl;
+    }
+
+    wheel::Analyzer analyzer;    
+    analyzer.SetData(data);
+    analyzer.Initialize(config);
+    
+    analyzer.Reconstruct(max); 
+  }
 }
 
 void Simulator::Initialize()
@@ -200,11 +228,18 @@ void Simulator::HandleSiPMInfo()
   c.SetPhi(0);
 
   TH2D* h = new TH2D("h", "h", 2*8, 0, 360, 20, 0, 20);
-      
-  for (const auto& sipm : m_sipmMap)
+  
+  float sum(0);
+  for (const auto& sipm : m_sipmMap) sum += sipm.second.TotalWeight();
+
+    
+  for (auto& sipm : m_sipmMap)
   {
-    std::cout << "SiPM " << sipm.first << " captured " << sipm.second.TotalWeight() << " photons!\n";
-    h->SetBinContent(2*(sipm.first -1) +1, m_diskRadius, sipm.second.TotalWeight());
+    std::cout << "SiPM " << sipm.first << " captured " << (sipm.second.TotalWeight()/sum)*100 << "%!\n";
+   
+    unsigned nPE = std::round(m_N0*(sipm.second.TotalWeight()/sum));
+    sipm.second.SetNPhotons(nPE);
+    h->SetBinContent(2*(sipm.first -1) +1, m_diskRadius, sipm.second.TotalWeight()/sum);
   }
 
   h->Draw("lego2 pol");
@@ -267,7 +302,7 @@ void Simulator::Emit(Photon& photon)
   CalculateNextBoundary(photon, currentPos, unitMomentum); 
 
   // If this photon missed our disk, we missed it
-  if (std::sqrt(currentPos[0]*currentPos[0] + currentPos[1]*currentPos[1]) > (m_diskRadius-0.01))
+  if (CalculateR(currentPos) > (m_diskRadius-0.01))
   {
     photon.SetWeight(0);
     photon.SetUnitMomentum(unitMomentum);
@@ -464,7 +499,7 @@ bool Simulator::Captured(Photon& photon)
           auto xBin = m_depositionHist.GetXaxis()->FindBin(photon.CurrentPosition()[0]);
           auto yBin = m_depositionHist.GetYaxis()->FindBin(photon.CurrentPosition()[1]);
           auto cont = m_depositionHist.GetBinContent(xBin, yBin);
-          m_depositionHist.SetBinContent(xBin, yBin, cont + sipm.TotalWeight() - sipmWeight);
+          m_depositionHist.SetBinContent(xBin, yBin, sipm.TotalWeight());
 
           return true;
         }
@@ -491,7 +526,7 @@ bool Simulator::Captured(Photon& photon)
           auto xBin = m_depositionHist.GetXaxis()->FindBin(photon.CurrentPosition()[0]);
           auto yBin = m_depositionHist.GetYaxis()->FindBin(photon.CurrentPosition()[1]);
           auto cont = m_depositionHist.GetBinContent(xBin, yBin);
-          m_depositionHist.SetBinContent(xBin, yBin, cont + sipm.TotalWeight() - sipmWeight);
+          m_depositionHist.SetBinContent(xBin, yBin, sipm.TotalWeight());
 
           return true;
         }
@@ -584,18 +619,19 @@ void Simulator::Reflect(Photon& photon)
     // Compute R for each polarization
     //n1 is disk
     float radicalTerm = (m_indexRefractionDisk/m_indexRefractionEnv)*std::sqrt(1 - cosIncidentAngle*cosIncidentAngle);
+    float b           = (m_indexRefractionDisk/m_indexRefractionEnv)*(m_indexRefractionDisk/m_indexRefractionEnv)*(m_permittivityEnv/m_permittivityDisk);
     
-    float numS = m_indexRefractionDisk*cosIncidentAngle - m_indexRefractionEnv*std::sqrt(1 - radicalTerm*radicalTerm);
-    float denS = m_indexRefractionDisk*cosIncidentAngle + m_indexRefractionEnv*std::sqrt(1 - radicalTerm*radicalTerm);
+    float numPerpen = m_indexRefractionDisk*cosIncidentAngle - b*m_indexRefractionEnv*std::sqrt(1 - radicalTerm*radicalTerm);
+    float denPerpen = m_indexRefractionDisk*cosIncidentAngle + b*m_indexRefractionEnv*std::sqrt(1 - radicalTerm*radicalTerm);
 
-    float numP = m_indexRefractionDisk*std::sqrt(1 - radicalTerm*radicalTerm) - m_indexRefractionEnv*cosIncidentAngle;
-    float denP = m_indexRefractionDisk*std::sqrt(1 - radicalTerm*radicalTerm) + m_indexRefractionEnv*cosIncidentAngle;
+    float numPara   = b*m_indexRefractionEnv*m_indexRefractionEnv*cosIncidentAngle - m_indexRefractionEnv*m_indexRefractionDisk*std::sqrt(1 - radicalTerm*radicalTerm);
+    float denPara   = b*m_indexRefractionEnv*m_indexRefractionEnv*cosIncidentAngle + m_indexRefractionEnv*m_indexRefractionDisk*std::sqrt(1 - radicalTerm*radicalTerm);
 
-    float R_S = (numS/denS)*(numS/denS);
-    float R_P = (numP/denP)*(numP/denP);
+    float R_Perpen = (numPerpen/denPerpen)*(numPerpen/denPerpen);
+    float R_Para   = (numPara/denPara)*(numPara/denPara);
 
     // Take the average
-    float R = 0.5*(R_S + R_P);
+    float R = 0.5*(R_Perpen + R_Para);
     //std::cout << R << std::endl;
 
     float weight = photon.Weight();
@@ -619,6 +655,7 @@ void Simulator::Reflect(Photon& photon)
   auto xBin = m_depositionHist.GetXaxis()->FindBin(photon.CurrentPosition()[0]);
   auto yBin = m_depositionHist.GetYaxis()->FindBin(photon.CurrentPosition()[1]);
   auto cont = m_depositionHist.GetBinContent(xBin, yBin);
+  //if (temp > (m_diskRadius - 1))  std::cout << m_surfaceAbsorptionCoeff*photon.Weight() << std::endl;
   m_depositionHist.SetBinContent(xBin, yBin, cont + m_surfaceAbsorptionCoeff*photon.Weight());
  
   float weight = (1 - m_surfaceAbsorptionCoeff)*photon.Weight();

@@ -38,8 +38,14 @@ void Analyzer::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap
   // Initialize voxels and containers
   std::cout << "\nInitializing reconstruction...\n";  
   Initialize(config);
+
+  // First to cound number of photons in each hit
+  // also N0 set to lower threshold to decrease computation time
+  const auto maxSiPM_counts = InitData(sipmToTriggerMap, sipmInfoMap, trigger);
+  unsigned N0 = maxSiPM_counts.second;
+
   // Start reconstruction
-  Reconstruct(sipmToTriggerMap, sipmInfoMap, trigger);
+  Reconstruct(N0);
   // Make a useful plot
   MakePlot(trigger);
 }
@@ -102,7 +108,7 @@ void Analyzer::InitVoxelList()
   }
 } 
 
-void Analyzer::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const unsigned& trigger)
+void Analyzer::Reconstruct(unsigned& N0)
 {
   // The idea here is to first get a rough estimate of the MLE parameters by
   // a simple grid search (this will be modified based on the application to
@@ -111,13 +117,9 @@ void Analyzer::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap
 
   // Start the timer for this trigger
   clock_t start = clock();
-
-  // First to cound number of photons in each hit
-  // also N0 set to lower threshold to decrease computation time
-  const auto maxSiPM_counts = InitData(sipmToTriggerMap, sipmInfoMap, trigger);
-  unsigned N0 = maxSiPM_counts.second;
-
+ 
   std::cout << "\nRunning MLE...\n";
+
   // Start main loop
   // We will cover the entire parameter space, at the expense of computation time
   // Once N0 is calculated, we'll use Newton-Raphson to better approximate x and y
@@ -227,7 +229,7 @@ float Analyzer::ComputeLambda(const float& r, const float& thetaDeg, const unsig
  
   float weight = N0*cosAngleSiPMToXYandSiPM*TMath::Exp(-sipmToXY/m_attenuationLength)/sipmToXY;
   //std::cout << "Weight = " << relativeWeight << "  at sipm " << sipm << " from x = " << x << " y = " << y << "  sipmToXY = " << sipmToXY << " angleXYandSIPM = " << angleXYandSiPMRad*180/TMath::Pi() << " beta = " << m_beta << "  thetaDeg = " << thetaDeg <<std::endl;
-  if (weight < 0) { std::cout << "UH OH! WEIGHT < 0!!\n"; std::exit(1); }
+  //if (weight < 0) { std::cout << "UH OH! WEIGHT < 0!! " << r << " " <<  sipm << "  " <<  cosAngleSiPMToXYandSiPM << "\n"; std::exit(1); }
   return weight;
 }
 
@@ -362,7 +364,7 @@ std::pair<unsigned, unsigned> Analyzer::InitData(SiPMToTriggerMap& sipmToTrigger
     for (auto& hit : sipm.second[0])
     {
       //std::cout << hit.hitHeight << "  " << hit.bias << "  " << thisBD << "\n";
-      hit.nPhotons = std::round(hit.hitAmplitude/( thisGain*( hit.bias - thisBD ) ));   // hit.bias - thisBD
+      hit.nPhotons = std::round(hit.hitAmplitude/thisGain);    //( thisGain*( hit.bias - thisBD ) ));   // hit.bias - thisBD
       sipmCounts += hit.nPhotons;
       //std::cout << hit.nPhotons << std::endl;
     }
@@ -385,7 +387,7 @@ void Analyzer::MakePlot(const unsigned& trigger)
   TFile f(m_recoOutputPath.c_str(), "UPDATE");
 
   // Log Likelihood distribution for m_mlN0
-  TH2D logLikelihoodDist("logLikelihoodDist", "Likelihood Profile", 500, -m_diskRadius, m_diskRadius, 500, -m_diskRadius, m_diskRadius); 
+  TH2D logLikelihoodDist("logLikelihoodDist", "Likelihood Profile", 500, -m_diskRadius - 1, m_diskRadius + 1, 500, -m_diskRadius - 1, m_diskRadius + 1); 
   // Make a copy for contours
   auto contour68 = logLikelihoodDist;
 
@@ -404,9 +406,8 @@ void Analyzer::MakePlot(const unsigned& trigger)
       float diff = -2*(logLikelihood - m_mlLogLikelihood);
 
       // For plotting purposes
-      if (diff > 20.0) diff = 20;
-      if (r > (m_diskRadius-1)) diff = 0;
-  
+      if (diff > 20.0) diff = 20;  
+      if (r > m_diskRadius) diff = 0;
       logLikelihoodDist.SetBinContent(xBin, yBin, diff);
       if (r > (m_diskRadius - 2)) diff = 20;
       contour68.SetBinContent(xBin, yBin, diff);
@@ -445,7 +446,7 @@ void Analyzer::MakePlot(const unsigned& trigger)
   TMarker xy(m_mlX, m_mlY, 20);
   xy.SetMarkerSize(2);
   xy.SetMarkerColor(1);
-  xy.Draw("same");
+  xy.Draw("same"); 
 
   // Add our legend
   TLegend leg1(0.1,0.6,0.3,0.7); 

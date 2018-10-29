@@ -119,10 +119,10 @@ void FileReader::ReadFile(HitCandidateVec& hitCandidateVec, const std::string& f
     std::string yTemp;
     std::string xTemp;
     std::getline(file, xTemp, ',');
-    std::getline(file, yTemp, ',');
+    std::getline(file, yTemp);
     counter++;
 
-    signal.push_back( atof(yTemp.c_str()) );
+    signal.push_back( -1*atof(yTemp.c_str()) );
   }
   
   // Analyze this waveform
