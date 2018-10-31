@@ -3,8 +3,7 @@
 //
 // Author: Hunter Sullivan
 //
-// Decription: Analysis code for sipmwheel
-//             This analyzes waveforms seen by each sipm for each "trigger"
+// Decription: Characterization, reconstruction, and simulation software for sipmwheel.
 // 
 // Future work: Implent this into the live event display.
 //
@@ -14,7 +13,6 @@
 #include <sstream>
 #include <string>
 #include <fstream>
-#include <dirent.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -31,6 +29,7 @@
 #include "FileReader.h"
 #include "Analyzer.h"
 #include "Characterizer.h"
+#include "ConfigReader.h"
 
 // Preprocessing variables
 #ifdef VERSION
@@ -41,15 +40,11 @@
 void PrintTheFiles(const wheel::SiPMToFilesMap& sipmToFilesMap);
 void PrintTheFiles(const wheel::SiPMToBiasTriggerMap& sipmToBiasTriggerMap);
 void GetTheCharacterizationFiles(wheel::SiPMToBiasTriggerMap& map, const wheel::Configuration& config);
-void GetTheFiles(wheel::SiPMToFilesMap& map, const wheel::Configuration& config);
-void ReadConfigFile(wheel::Configuration& config);
-void SaveWaveforms(wheel::FileReader& fr, const wheel::Configuration& config);
+void GetTheRecoFiles(wheel::SiPMToFilesMap& map, const wheel::Configuration& config);
 void Characterize(const wheel::Configuration& myConfig);
 void Reco(const wheel::Configuration& myConfig);
-void RecordBiases(wheel::Configuration& config, const std::string& value);
-void RecordGains(std::map<unsigned, float>& map, const wheel::Configuration& config, const std::string& value);
 void FillSiPMInfo(wheel::SiPMInfoMap& sipmInfoMap, const wheel::Configuration& config);
-void OutputConfigInfo(wheel::Configuration& config);
+void InitializeOutputFiles(const wheel::Configuration& config);
 
 int main(int argc, char **argv)
 {
@@ -64,10 +59,15 @@ int main(int argc, char **argv)
   std::cout << "\nReading configuration file... " << std::endl;
   wheel::Configuration myConfig;
   myConfig.pathToConfig = argv[1];
-  ReadConfigFile(myConfig);
-  OutputConfigInfo(myConfig);
+  
+  wheel::ConfigReader configReader;
+  configReader.ReadFile(myConfig);
+  configReader.OutputConfigInfo(myConfig);
 
-  //const std::string process = argv[2];
+  // Initialize output files
+  InitializeOutputFiles(myConfig);
+
+  // This will ultimately be broken up
   if      (myConfig.process == "characterize") Characterize(myConfig);
   else if (myConfig.process == "reco")         Reco(myConfig);
   else    { std::cout << "Error. Must choose characterize or reco.\n" << myConfig.process << std::endl; exit(1); }
@@ -75,64 +75,24 @@ int main(int argc, char **argv)
   return 0;
 }
 
-void OutputConfigInfo(wheel::Configuration& config)
+void InitializeOutputFiles(const wheel::Configuration& config)
 {
-  // Hello there!
-  std::cout << std::setfill('-') << std::setw(80) << "-" << std::setfill(' ')  << std::endl;
-  std::cout << "     SiPM Wheel Characterization and Analysis Code      "      << std::endl;
-  std::cout << "                 Version: " << sipmWheelVersion                << std::endl;
-  std::cout << "         Author: Hunter Sullivan (UT Arlington)         "      << std::endl;
-  std::cout                                                                    << std::endl;
-  std::cout << "SiPM Wheel Configuration:\n";
-  if (config.process == "reco") {
-  std::cout << "Process             " << config.process                        << std::endl
-            << "PathToData          " << config.pathToData                     << std::endl
-            << "SaveRawWaveforms    " << config.saveRawWaveforms               << std::endl
-            << "SaveModWaveforms    " << config.saveModWaveforms               << std::endl
-            << "RawWaveformsPath    " << config.rawWaveformPath                << std::endl
-            << "ModWaveformsPath    " << config.modWaveformPath                << std::endl
-            << "RecoOutputPath      " << config.recoOutputPath                 << std::endl
-            << "BaselineSubtract    " << config.baselineSubtract               << std::endl
-            << "SmoothWaveform      " << config.smoothWaveform                 << std::endl
-            << "SMARange            " << config.smaRange                       << std::endl
-            << "WaveformResolution  " << config.resolution                     << std::endl
-            << "HitFinderSearch     " << config.hitFinderSearch                << std::endl
-            << "MinimumHitAmp       " << config.minimumHitAmp                  << std::endl
-            << "NumerOfSiPMs        " << config.nSiPMs                         << std::endl
-            << "Biases              ";for(const auto& bias : config.biases)     std::cout << bias        << "  ";
-                                                                                std::cout << std::endl; std::cout 
-            << "Gains               ";for(const auto& sipm : config.gains)      std::cout << sipm.second << "  ";
-                                                                                std::cout << std::endl; std::cout  
-            << "Breakdowns          ";for(const auto& sipm : config.breakdowns) std::cout << sipm.second << "  ";
-                                                                                std::cout << std::endl; std::cout 
-            << "nVoxels             " << config.nVoxels                        << std::endl
-            << "maxIterations       " << config.maxIterations                  << std::endl
-            << "AttenuationLength   " << config.attenuationLength              << std::endl
-            << "DiskRadius          " << config.diskRadius                     << std::endl;
-  std::cout << std::setfill('-') << std::setw(80) << "-" << std::setfill(' ') << std::endl;
-  std::cout << std::endl;
-  return;
+  if (config.process == "characterize") 
+  {
+    TFile f1(config.characterizeOutputPath.c_str(), "RECREATE");
+    f1.Close();
   }
-  std::cout << "Process             " << config.process                        << std::endl
-            << "PathToData          " << config.pathToData                     << std::endl
-            << "OutputPath          " << config.characterizeOutputPath         << std::endl
-            << "NFiles/SiPM         " << config.nFilesCharacterize             << std::endl
-            << "SaveRawWaveforms    " << config.saveRawWaveforms               << std::endl
-            << "SaveModWaveforms    " << config.saveModWaveforms               << std::endl
-            << "RawWaveformsPath    " << config.rawWaveformPath                << std::endl
-            << "ModWaveformsPath    " << config.modWaveformPath                << std::endl
-            << "BaselineSubtract    " << config.baselineSubtract               << std::endl
-            << "SmoothWaveform      " << config.smoothWaveform                 << std::endl
-            << "SMARange            " << config.smaRange                       << std::endl
-            << "WaveformResolution  " << config.resolution                     << std::endl
-            << "HitFinderSearch     " << config.hitFinderSearch                << std::endl
-            << "MinimumHitAmp       " << config.minimumHitAmp                  << std::endl
-            << "NumerOfSiPMs        " << config.nSiPMs                         << std::endl
-            << "AmpThreshold        " << config.characterizeAmpThr             << std::endl
-            << "AmpSigma            " << config.characterizeAmpSig             << std::endl
-            << "AmpFitRange         " << config.characterizeAmpFitRange        << std::endl;
-  std::cout << std::setfill('-') << std::setw(80) << "-" << std::setfill(' ') << std::endl;	
-  std::cout << std::endl;
+  if (config.process == "reco")
+  {
+    TFile f(config.recoOutputPath.c_str(), "RECREATE");
+    f.Close();
+  }
+  
+  // Waveform files
+  TFile f2(config.rawWaveformPath.c_str(), "RECREATE");
+  f2.Close();
+  TFile f3(config.modWaveformPath.c_str(), "RECREATE");
+  f3.Close();
 }
 
 void Reco(const wheel::Configuration& myConfig)
@@ -150,7 +110,7 @@ void Reco(const wheel::Configuration& myConfig)
   // First we need to get the files to read data from
   std::cout << "\nGetting the files from: " << myConfig.pathToData << std::endl;
   wheel::SiPMToFilesMap sipmToFilesMap;
-  GetTheFiles(sipmToFilesMap, myConfig);
+  GetTheRecoFiles(sipmToFilesMap, myConfig);
 
   // Make sure there is the same amount of data for each sipm
   const unsigned& nFiles = sipmToFilesMap.find(1)->second.size();
@@ -178,9 +138,8 @@ void Reco(const wheel::Configuration& myConfig)
     {
       if (sipm.second.size() != 1) { std::cout << "Error. There is not 1 file specified for each sipm\n." << std::endl; exit(1); }
     } 
-    // Option to output a few waveforms
-    if (trigger == 1) SaveWaveforms(fr, myConfig);
-  
+ 
+    // Start reconstruction
     wheel::Analyzer analyzer;
     analyzer.Reconstruct(sipmToTriggerMap, sipmInfoMap, myConfig, trigger);
   }
@@ -207,8 +166,7 @@ void Characterize(const wheel::Configuration& myConfig)
     wheel::SiPMToTriggerMap sipmToTriggerMap;
     wheel::FileReader fr;
     fr.ReadFiles(sipmToTriggerMap, sipm.second, sipm.first, myConfig);
-    // Option to output graphs
-    if (sipm.first == 1) SaveWaveforms(fr, myConfig);
+
     // Characterize
     wheel::SiPMInfoMap sipmInfoMap;
     ch.Characterize(sipmInfoMap, sipmToTriggerMap, myConfig);
@@ -233,80 +191,6 @@ void FillSiPMInfo(wheel::SiPMInfoMap& sipmInfoMap, const wheel::Configuration& c
 
     sipmInfoMap.emplace(sipm, sipmInfo);
   }
-}
-
-void ReadConfigFile(wheel::Configuration& config)
-{
-  // Open the file
-  std::ifstream file(config.pathToConfig.c_str());
-  if (!file.is_open()) {
-    std::cout << "Cannot open file: " << config.pathToConfig << std::endl;
-    exit(1);
-  }
-  
-  std::string header, value;
-  while(std::getline(file, header, '=')) 
-  {
-    std::getline(file, value);
-
-    if      (header == "pathToData")              config.pathToData      = value;
-    else if (header == "rawWaveformPath")         config.rawWaveformPath = value;
-    else if (header == "modWaveformPath")         config.modWaveformPath = value;
-    else if (header == "recoOutputPath")          config.recoOutputPath  = value;
-    else if (header == "printFiles")              value == "true" ? config.printFiles       = true : config.printFiles       = false;
-    else if (header == "baselineSubtract")        value == "true" ? config.baselineSubtract = true : config.baselineSubtract = false;
-    else if (header == "saveRawWaveforms")        value == "true" ? config.saveRawWaveforms = true : config.saveRawWaveforms = false;
-    else if (header == "saveModWaveforms")        value == "true" ? config.saveModWaveforms = true : config.saveModWaveforms = false;
-    else if (header == "nSiPMs")                  config.nSiPMs          = std::stoi(value);
-    else if (header == "smoothWaveform")          value == "true" ? config.smoothWaveform = true : config.smoothWaveform = false;
-    else if (header == "smaRange")                config.smaRange        = std::stoi(value);
-    else if (header == "hitFinderSearch")         config.hitFinderSearch = std::stoi(value);
-    else if (header == "resolution")              config.resolution      = std::stoi(value);
-    else if (header == "minimumHitAmp")           config.minimumHitAmp   = std::stof(value);
-    else if (header == "process")                 value == "characterize" ? config.process  = "characterize" : config.process = "reco"; // default to reco
-    else if (header == "characterizeAmpThr")      config.characterizeAmpThr      = std::stof(value);
-    else if (header == "characterizeAmpSig")      config.characterizeAmpSig      = std::stof(value);
-    else if (header == "characterizeAmpFitRange") config.characterizeAmpFitRange = std::stof(value);
-    else if (header == "characterizeOutputPath")  config.characterizeOutputPath  = value;
-    else if (header == "nFilesCharacterize")      config.nFilesCharacterize      = std::stoi(value);
-    else if (header == "nBiases")                 config.nBiases                 = std::stoi(value);
-    else if (header == "biases")                  RecordBiases(config, value); 
-    else if (header == "gains")                   RecordGains(config.gains, config, value);
-    else if (header == "breakdowns")              RecordGains(config.breakdowns, config, value);
-    else if (header == "diskRadius")              config.diskRadius = std::stof(value);
-    else if (header == "attenuationLength")       config.attenuationLength = std::stof(value); 
-    else if (header == "nVoxels")                 config.nVoxels    = std::stoi(value);
-    else if (header == "maxIterations")           config.maxIterations = std::stoi(value);
-    else    { std::cout << "Cannot identify " << header << std::endl; exit(1); }
-  }
-  
-  // Place a series of safety nets here;
-  if (config.nBiases != config.biases.size())                                { std::cout << "Error. Number of biases does not match in config.\n" << std::endl; exit(1); }
-  if (config.process == "reco" && config.nSiPMs != config.gains.size())      { std::cout << "Error. Number of gains does not match number of SiPMs\n." << std::endl; exit(1); }
-  if (config.process == "reco" && config.nSiPMs != config.breakdowns.size()) { std::cout << "Error. Number of breakdowns does not match number of SiPMs\n." << std::endl; exit(1); }
-  if (config.process == "reco" && config.biases.size() != 1)                 { std::cout << "Error. Can only specify one bias for reconstruction\n." << std::endl; exit(1); }
-}
-
-void RecordGains(std::map<unsigned, float>& map, const wheel::Configuration& config, const std::string& value)
-{
-  // Make sure n sipms has been defined
-  if (!config.nSiPMs) { std::cout << "Error. Please specify number of sipms before listing gains and breakdowns.\n" << std::endl; exit(1); }
-  
-  std::stringstream linestream(value);
-  std::string gain;
-  unsigned sipm = 1;
-  while(std::getline(linestream, gain, ',')) { map.emplace(sipm, std::stof(gain)); sipm++; }
-}
-
-
-void RecordBiases(wheel::Configuration& config, const std::string& value)
-{
-  // Make sure n biases has been defined
-  if (!config.nBiases) { std::cout << "Error. Please specify number of biases before listing biases.\n" << std::endl; exit(1); }
-  
-  std::stringstream linestream(value);
-  std::string bias;
-  while(std::getline(linestream, bias, ',')) config.biases.insert(std::stof(bias));
 }
 
 void GetTheCharacterizationFiles(wheel::SiPMToBiasTriggerMap& map, const wheel::Configuration& config)
@@ -345,7 +229,7 @@ void GetTheCharacterizationFiles(wheel::SiPMToBiasTriggerMap& map, const wheel::
   }
 }
 
-void GetTheFiles(wheel::SiPMToFilesMap& map, const wheel::Configuration& config)
+void GetTheRecoFiles(wheel::SiPMToFilesMap& map, const wheel::Configuration& config)
 {
   namespace stdfs = std::experimental::filesystem;
 
@@ -408,53 +292,5 @@ void PrintTheFiles(const wheel::SiPMToBiasTriggerMap& map)
       for (const auto& file : bias.second) std::cout << file << std::endl;
     }
     std::cout << std::endl;
-  }
-}
-
-void SaveWaveforms(wheel::FileReader& fr, const wheel::Configuration& config)
-{
-  // First output raw
-  if (config.saveRawWaveforms)
-  {
-    std::cout << "Outputing waveforms... " << std::endl;
-    // Create a file to write to
-    TFile f(config.rawWaveformPath.c_str(), "RECREATE");
-  
-    unsigned counter = 0;
-    for (auto& g : fr.GetRawGraphs())
-    {
-      TCanvas c(std::to_string(counter).c_str(), std::to_string(counter).c_str(), 500, 500);
-      //g->GetXaxis()->SetRangeUser(1900, 2100);
-      //g->Fit(fits[counter], "R+", "", 1988, 2100);
-      g.Draw("");
-      // Write this to file
-      c.Write();
-      counter++;
-    }
-  f.Close();
-  }
-  // Now output modified
-  if (config.saveModWaveforms)
-  {
-    std::cout << "Outputing modified waveforms... " << std::endl;
-    // Create a file to write to
-    TFile f(config.modWaveformPath.c_str(), "RECREATE");
-    
-    unsigned counter = 0;
-    for (auto& g : fr.GetModGraphs())
-    {
-      TCanvas c(std::to_string(counter).c_str(), std::to_string(counter).c_str(), 500, 500);
-      //g->GetXaxis()->SetRangeUser(1900, 2100);
-      //g->Fit(fits[counter], "R+", "", 1988, 2100);
-      g.Draw("");
-      std::list<TMarker> ml = fr.GetMarkers()[counter];
-      for (auto& m : ml) m.Draw("same");
-      
-      // Write this to file
-      c.Write();
-      counter++;
-    }
-   
-  f.Close();
   }
 }
