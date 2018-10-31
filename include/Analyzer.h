@@ -55,6 +55,8 @@ public:
   void  Reconstruct(unsigned& N0);
   void  SetData(const std::map<unsigned, unsigned>& data) { m_data = data; };
   void  Initialize(const Configuration& config);
+  void  MakePlot(const unsigned& trigger);
+
     
 private:
 
@@ -63,7 +65,6 @@ private:
   float    ComputeLambda(const float& r, const float& theta, const unsigned& N0, const unsigned& m);
   void     Handle(const unsigned& N0);
   void     InitVoxelList();
-  void     MakePlot(const unsigned& trigger);
   void     ConvertToPolar(float& r, float& thetaDeg, const float& x, const float& y);
   void     RefineEstimate(unsigned& iterator);
  
