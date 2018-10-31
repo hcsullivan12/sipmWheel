@@ -1,5 +1,6 @@
 process=simulate
 simulateOutputPath=/home/hunter/projects/sipmWheel/output/simulateOutput.root
+recoAnaTreePath=/home/hunter/projects/sipmWheel/output/recoAnaTree.root
 nSiPMs=8
 N0=100
 reconstruct=true
