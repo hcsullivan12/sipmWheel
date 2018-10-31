@@ -93,8 +93,8 @@ void Analyzer::InitVoxelList()
       float thetaDeg = std::abs(TMath::ASin(y/r))*(180/TMath::Pi());
 
       // Create our voxels
-      Voxel v1( x,  y,  r,  thetaDeg);     Voxel v2(-x,  y,  r,  thetaDeg+90);
-      Voxel v3(-x, -y,  r,  thetaDeg+180); Voxel v4( x, -y,  r,  thetaDeg+270);
+      Voxel v1( x,  y,  r,  thetaDeg);     Voxel v2(-x,  y,  r,  180-thetaDeg);
+      Voxel v3(-x, -y,  r,  thetaDeg+180); Voxel v4( x, -y,  r,  360-thetaDeg);
 
       // Ignore if the voxel lies outside our ROI
       if (r >= m_diskRadius) continue;
@@ -117,6 +117,8 @@ void Analyzer::Reconstruct(unsigned& N0)
 
   // Start the timer for this trigger
   clock_t start = clock();
+
+  if (N0 == 0) { std::cout << "No photons detected!\n"; return; }
  
   std::cout << "\nRunning MLE...\n";
 
@@ -126,7 +128,7 @@ void Analyzer::Reconstruct(unsigned& N0)
   while (N0 <= 5000) 
   {
     Handle(N0);
-    N0 = N0+5;
+    N0 = N0+3;
   }
  
   // We should have the ml now
@@ -163,7 +165,18 @@ void Analyzer::Handle(const unsigned& N0)
   {
     // Log likelihood for this parameter set
     double logLikelihood = ComputeLogLikelihood(voxel.X(), voxel.Y(), N0);
-    if (logLikelihood > m_mlLogLikelihood) { m_mlLogLikelihood = logLikelihood; m_mlN0 = N0; m_mlX = voxel.X(); m_mlY = voxel.Y(); m_mlRadius = voxel.R(); m_mlTheta = voxel.Theta(); } 
+
+    //std::cout << logLikelihood << std::endl;
+
+    if (logLikelihood > m_mlLogLikelihood) 
+    { 
+      m_mlLogLikelihood = logLikelihood; 
+      m_mlN0            = N0; 
+      m_mlX             = voxel.X(); 
+      m_mlY             = voxel.Y(); 
+      m_mlRadius        = voxel.R(); 
+      m_mlTheta         = voxel.Theta(); 
+    } 
   }
 }
 
@@ -179,7 +192,7 @@ double Analyzer::ComputeLogLikelihood(const float& x, const float& y, const unsi
   for (int sipm = 1; sipm <= m_nSiPMs; sipm++) 
   {
     float lambda_m = ComputeLambda(r, thetaDeg, N0, sipm);
-    //std::cout << "nPhotons: " << m_data.find(m)->second << "  lambda_m " << lambda_m << "   factorial " << TMath::Factorial(m_data.find(m)->second) << "  term ";
+    //std::cout << "nPhotons: " << m_data.find(sipm)->second << "  lambda_m " << lambda_m << "   factorial " << TMath::Factorial(m_data.find(sipm)->second) << "  term ";
     double term = m_data.find(sipm)->second*log(lambda_m) - lambda_m - log(TMath::Factorial(m_data.find(sipm)->second));
     //std::cout << term << std::endl;
     sum = sum + term;
@@ -228,8 +241,6 @@ float Analyzer::ComputeLambda(const float& r, const float& thetaDeg, const unsig
   if (sipmToXY != 0) cosAngleSiPMToXYandSiPM = (-r*r + sipmToXYSquared + m_diskRadius*m_diskRadius)/(2*sipmToXY*m_diskRadius);
  
   float weight = N0*cosAngleSiPMToXYandSiPM*TMath::Exp(-sipmToXY/m_attenuationLength)/sipmToXY;
-  //std::cout << "Weight = " << relativeWeight << "  at sipm " << sipm << " from x = " << x << " y = " << y << "  sipmToXY = " << sipmToXY << " angleXYandSIPM = " << angleXYandSiPMRad*180/TMath::Pi() << " beta = " << m_beta << "  thetaDeg = " << thetaDeg <<std::endl;
-  //if (weight < 0) { std::cout << "UH OH! WEIGHT < 0!! " << r << " " <<  sipm << "  " <<  cosAngleSiPMToXYandSiPM << "\n"; std::exit(1); }
   return weight;
 }
 
@@ -406,10 +417,10 @@ void Analyzer::MakePlot(const unsigned& trigger)
       float diff = -2*(logLikelihood - m_mlLogLikelihood);
 
       // For plotting purposes
-      if (diff > 20.0) diff = 20;  
+      if (diff > 10.0) diff = 10;  
       if (r > m_diskRadius) diff = 0;
       logLikelihoodDist.SetBinContent(xBin, yBin, diff);
-      if (r > (m_diskRadius - 2)) diff = 20;
+      if (r > (m_diskRadius - 2)) diff = 10;
       contour68.SetBinContent(xBin, yBin, diff);
     }
   }  
@@ -448,6 +459,11 @@ void Analyzer::MakePlot(const unsigned& trigger)
   xy.SetMarkerColor(1);
   xy.Draw("same"); 
 
+  TMarker trueXY(0.5, 10, 20);
+  trueXY.SetMarkerSize(2);
+  trueXY.SetMarkerColor(2);
+  trueXY.Draw("same");
+ 
   // Add our legend
   TLegend leg1(0.1,0.6,0.3,0.7); 
   leg1.AddEntry(&contour68, "68% CL", "l");
@@ -469,7 +485,8 @@ void Analyzer::MakePlot(const unsigned& trigger)
   std::vector<unsigned> prediction;
   prediction.reserve(m_nSiPMs);
   // Maximum, used for plotting
-  float max(m_maxCounts);
+  float max(0);
+  for (const auto& d : m_data) if (d.second > max) max = d.second;
   for (int sipm = 1; sipm <= m_nSiPMs; sipm++) 
   {
     float lambda = ComputeLambda(m_mlRadius, m_mlTheta, m_mlN0, sipm); 
