@@ -112,6 +112,8 @@ private:
   void  MakePlots(std::vector<TGraph*> stepGraphs);
   void  HandleSiPMInfo();
   float CalculateR(const std::vector<float>& pos);
+  bool  Terminate(Photon& photon);
+  void  UpdatePlot();
 
  
   std::string              m_simulateOutputPath;     ///< Output path for results
@@ -144,6 +146,7 @@ private:
   TRandom                  m_phiGenerator;           ///< Used for intensity profile
   TRandom                  m_momentumGenerator;      ///< Generates tpb emission
   TRandom                  m_smearGenerator;         ///< Generates smearing
+  TRandom                  m_rouletteGenerator;      ///< Generates termination chance
 };
 }
 

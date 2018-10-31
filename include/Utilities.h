@@ -67,7 +67,6 @@ struct Configuration
   std::string               pathToConfig;              ///< Path to configuration file
   std::string               recoOutputPath;            ///< Output path for reconstruction results
   std::string               characterizeOutputPath;    ///< Output path for characterization results
-  std::string               simulateOutputPath;        ///< Output path for simulation results
   // Output options and signal processing
   bool                      printFiles;                ///< Option to print out data files
   bool                      baselineSubtract;          ///< Option to baseline subtract

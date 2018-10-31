@@ -31,7 +31,7 @@ SiPM::~SiPM()
 Simulator::Simulator(const Configuration& config)
 {
   // So we don't have to keep passing config
-  m_simulateOutputPath     = config.simulateOutputPath;
+  m_simulateOutputPath     = config.recoOutputPath;
   m_nSiPMs                 = config.nSiPMs;
   m_N0                     = config.N0;
   m_reconstruct            = config.reconstruct;
@@ -58,6 +58,7 @@ Simulator::Simulator(const Configuration& config)
   m_phiGenerator.SetSeed(0);
   m_momentumGenerator.SetSeed(0);
   m_smearGenerator.SetSeed(0);
+  m_rouletteGenerator.SetSeed(0); 
   // Initialize histograms
   m_stepHist.SetName("Step Size");
   m_stepHist.SetBins(100, 0, 200);
@@ -111,7 +112,7 @@ void Simulator::Simulate(const Configuration& config)
     // Emit!
     Emit(photon);
     // If it missed the disk
-    if (photon.Weight() < m_terminationThreshold) continue;
+    if(Terminate(photon)) continue;
 
     photon.XSteps().push_back(photon.CurrentPosition()[0]);
     photon.YSteps().push_back(photon.CurrentPosition()[1]);
@@ -191,12 +192,25 @@ void Simulator::Simulate(const Configuration& config)
       data.emplace(sipm, nPE);
       std::cout << "SIPM " << sipm << " --> " << nPE << std::endl;
     }
+    /*data.emplace(1,100);
+    data.emplace(2,70);
+    data.emplace(3,50);
+    data.emplace(4,20);
+    data.emplace(5,10);
+    data.emplace(6,20);
+    data.emplace(7,50);
+    data.emplace(8,70);*/
 
+    // Initialize the main work horse for reconstruction
     wheel::Analyzer analyzer;    
-    analyzer.SetData(data);
     analyzer.Initialize(config);
-    
+    analyzer.SetData(data);
+    // Begin!
     analyzer.Reconstruct(max); 
+    // Plots
+    analyzer.MakePlot(1);
+    // Add the true point
+    UpdatePlot();
   }
 }
 
@@ -349,26 +363,28 @@ void Simulator::CalculateNextBoundary(Photon& photon, const std::vector<float>& 
   nextBoundary[1] = currentPos[1] + stepEpsilon*unitMomentum[1]; 
   nextBoundary[2] = currentPos[2] + stepEpsilon*unitMomentum[2]; 
 
+  // WE DON"T KNOW WHICH BOUNDARY YET!!!
+
   // Handle floating point errors
   float r = CalculateR(nextBoundary);
-  float eps = -0.001;
-  while (r > (m_diskRadius-0.01))
+  float eps(0);
+  while ((m_diskRadius-0.03) < r)
   {
     nextBoundary[0] = currentPos[0] + (stepEpsilon+eps)*unitMomentum[0];
     nextBoundary[1] = currentPos[1] + (stepEpsilon+eps)*unitMomentum[1];
     nextBoundary[2] = currentPos[2] + (stepEpsilon+eps)*unitMomentum[2];
-    eps = eps - 0.001;
+    eps = eps - 0.01;
     r = CalculateR(nextBoundary);
   } 
-
+  
   if (r > (m_diskRadius+0.01)) std::cout << "HOLDUP50\n"; 
 
   // Set the next boundary
   photon.SetNextBoundary(nextBoundary);
 
   // What boundary is this?
-  if ((m_diskRadius-0.001) < r    && r < (m_diskRadius+0.001))    { photon.SetBoundary("side");   return; }
-  if ((0-0.001) < nextBoundary[2] && nextBoundary[2] < (0+0.001)) { photon.SetBoundary("bottom"); return; }
+  if ((m_diskRadius-0.05) < r    && r < (m_diskRadius+0.05))    { photon.SetBoundary("side");   return; }
+  if ((0-0.01) < nextBoundary[2] && nextBoundary[2] < (0+0.01)) { photon.SetBoundary("bottom"); return; }
   
   // Otherise
   photon.SetBoundary("top");
@@ -398,6 +414,7 @@ void Simulator::Step(Photon& photon, unsigned& stepNumber)
     float lossFrac = weight*(m_bulkAbsorption/m_bulkAttenuation); 
     weight = weight - lossFrac;
     photon.SetWeight(weight);
+    if (std::isnan(photon.Weight())) std::cout << weight << std::endl;
 
     // We have to step again!
     // Find next position
@@ -442,6 +459,7 @@ void Simulator::Step(Photon& photon, unsigned& stepNumber)
   // Handle reflection
   float temp = CalculateR(photon.CurrentPosition());
   if (temp > (m_diskRadius+0.001)) std::cout << "HOLDUP20 " << temp << "\n";
+  if (std::isnan(photon.Weight())) std::cout << "her3e80 = " << std::endl;
   Reflect(photon);
 
   photon.XSteps().push_back(photon.CurrentPosition()[0]);
@@ -450,7 +468,7 @@ void Simulator::Step(Photon& photon, unsigned& stepNumber)
 
   // Check the weight
   // Safety
-  if (photon.Weight() < m_terminationThreshold) { photon.SetWeight(0.0); return; }
+  if (Terminate(photon)) return;
 
   // Recursive call
   Step(photon, stepNumber);
@@ -488,9 +506,9 @@ bool Simulator::Captured(Photon& photon)
         {
           // Captured!
           float sipmWeight = sipm.TotalWeight();
-          //std::cout << "SiPM " << sipmCount.first << "  " << sipmWeight << std::endl;
+          if (std::isnan(photon.Weight()) || std::isnan(sipmWeight)) std::cout << "SiPM " << sipmCount.first << "  " << sipmWeight << " photon weight " << photon.Weight() << std::endl;
           sipm.SetTotalWeight(sipmWeight + photon.Weight());
-          photon.SetWeight(0);
+          photon.SetWeight(0.0);
 
           // Update our deposition plot
           float temp = CalculateR(photon.CurrentPosition());
@@ -515,9 +533,9 @@ bool Simulator::Captured(Photon& photon)
         {
           // Captured!
           float sipmWeight = sipm.TotalWeight();
-          //std::cout << "SiPM " << sipmCount.first << "  " << sipmWeight << std::endl;
+          if (std::isnan(photon.Weight()) || std::isnan(sipmWeight)) std::cout << "SiPM " << sipmCount.first << "  " << sipmWeight << "  photon weight " << photon.Weight() << std::endl;
           sipm.SetTotalWeight(sipmWeight + photon.Weight());
-          photon.SetWeight(0);
+          photon.SetWeight(0.0);
 
           // Update our deposition plot
           float temp = CalculateR(photon.CurrentPosition());
@@ -545,8 +563,12 @@ float Simulator::CalculateDistance(const std::vector<float>& currentPos, const s
 
 void Simulator::Reflect(Photon& photon)
 {
+  if (std::isnan(photon.Weight())) std::cout << "her3e110 = " << std::endl;
+
   // Have we hit an sipm yet?
   if (Captured(photon)) return;
+
+  if (std::isnan(photon.Weight())) std::cout << "her3e100 = " << std::endl;
 
   // We have two mechanisms which attenuate our photons
   //  1) Loss of light from partial reflection (critical angle) 
@@ -556,13 +578,12 @@ void Simulator::Reflect(Photon& photon)
   // 1) 
   // First, let's calculate the angle of reflection
   if (m_indexRefractionEnv/m_indexRefractionDisk > 1) {std::cout << "Error. IndexRefractionEnv/indexRefractionDisk > 1!\n"; exit(1); }
-  const float criticalAngleDeg  = TMath::Sin(m_indexRefractionEnv/m_indexRefractionDisk)*180/TMath::Pi();
+  const float criticalAngleDeg  = TMath::ASin(m_indexRefractionEnv/m_indexRefractionDisk)*180/TMath::Pi();
   const auto  incidentPhotonDir = photon.UnitMomentum();
 
   // Now we have to know which surface we've hit
   // Top/bottom, Side
-  float cosIncidentAngle;
-  auto outgoingPhotonDir = incidentPhotonDir;
+  std::vector<float> outgoingPhotonDir(3,0);
   std::vector<float> unitVec(3,0);
 
   // It's easier here if we smear the angle between zUnit and the surface norm
@@ -599,6 +620,12 @@ void Simulator::Reflect(Photon& photon)
   surfaceUnitRot[2]   = (-sinSmear2*cosSmear1*cosSmear3 + sinSmear1*sinSmear3)*surfaceUnit[0] + 
                         (sinSmear2*cosSmear1*sinSmear3  + sinSmear1*cosSmear3)*surfaceUnit[1] + cosSmear1*cosSmear2*surfaceUnit[2];
 
+  // Safety here, make sure our rotated normal is still a unit vector
+  mag = std::sqrt(surfaceUnitRot[0]*surfaceUnitRot[0] + surfaceUnitRot[1]*surfaceUnitRot[1] + surfaceUnitRot[2]*surfaceUnitRot[2]);
+  surfaceUnitRot[0] = surfaceUnitRot[0]/mag;
+  surfaceUnitRot[1] = surfaceUnitRot[1]/mag;
+  surfaceUnitRot[2] = surfaceUnitRot[2]/mag;
+
   // Compute the outgoing vector now
   // v and n are both unit vectors!
   float vDotn = incidentPhotonDir[0]*surfaceUnitRot[0] + incidentPhotonDir[1]*surfaceUnitRot[1] + incidentPhotonDir[2]*surfaceUnitRot[2];
@@ -609,16 +636,20 @@ void Simulator::Reflect(Photon& photon)
   photon.SetUnitMomentum(outgoingPhotonDir);
 
   // What's the angle of incidence?
-  cosIncidentAngle = std::abs(vDotn);
+  float cosIncidentAngle = std::abs(vDotn);
+  float sinIncidentAngle = std::sqrt(1.001 - cosIncidentAngle*cosIncidentAngle);
   float incidentAngleDeg = TMath::ACos(cosIncidentAngle)*180/TMath::Pi();
-    
-  // If it's below the critical angle, attenuate 
-  if (incidentAngleDeg < criticalAngleDeg)
+      
+  if (std::isnan(photon.Weight())) std::cout << "her3e150 = " << cosIncidentAngle << " " << incidentAngleDeg <<  std::endl;
+
+  
+  // If it's below the critical angle, attenuate
+  // Be careful! 
+  if (incidentAngleDeg < (criticalAngleDeg - 0.1))
   {
     // We need the reflection coeffecient here
     // Compute R for each polarization
-    //n1 is disk
-    float radicalTerm = (m_indexRefractionDisk/m_indexRefractionEnv)*std::sqrt(1 - cosIncidentAngle*cosIncidentAngle);
+    float radicalTerm = (m_indexRefractionDisk/m_indexRefractionEnv)*sinIncidentAngle;
     float b           = (m_indexRefractionDisk/m_indexRefractionEnv)*(m_indexRefractionDisk/m_indexRefractionEnv)*(m_permittivityEnv/m_permittivityDisk);
     
     float numPerpen = m_indexRefractionDisk*cosIncidentAngle - b*m_indexRefractionEnv*std::sqrt(1 - radicalTerm*radicalTerm);
@@ -635,15 +666,17 @@ void Simulator::Reflect(Photon& photon)
     //std::cout << R << std::endl;
 
     float weight = photon.Weight();
-    photon.SetWeight(R*weight);
-    
+    if (std::isnan(weight)) std::cout << "R = " << R << std::endl;
+    photon.SetWeight(R*weight); 
+ 
     // E deposition
     auto xBin = m_depositionHist.GetXaxis()->FindBin(photon.CurrentPosition()[0]);
     auto yBin = m_depositionHist.GetYaxis()->FindBin(photon.CurrentPosition()[1]);
     auto cont = m_depositionHist.GetBinContent(xBin, yBin);
     m_depositionHist.SetBinContent(xBin, yBin, cont + (1-R)*weight);
 
-    if (photon.Weight() < m_terminationThreshold) { photon.SetWeight(0.0); return; }
+    if (Terminate(photon)) return;
+    if (std::isnan(photon.Weight())) std::cout << "her3e60 = " << std::endl;
   }
 
   // 2)
@@ -657,9 +690,11 @@ void Simulator::Reflect(Photon& photon)
   auto cont = m_depositionHist.GetBinContent(xBin, yBin);
   //if (temp > (m_diskRadius - 1))  std::cout << m_surfaceAbsorptionCoeff*photon.Weight() << std::endl;
   m_depositionHist.SetBinContent(xBin, yBin, cont + m_surfaceAbsorptionCoeff*photon.Weight());
- 
-  float weight = (1 - m_surfaceAbsorptionCoeff)*photon.Weight();
+
+  if (std::isnan(photon.Weight())) std::cout << "her1e " << photon.Weight() << std::endl;
+  float weight = (1.0 - m_surfaceAbsorptionCoeff)*photon.Weight();
   photon.SetWeight(weight); 
+  if (std::isnan(photon.Weight())) std::cout << "here " << weight << std::endl;
  
   // What is the next boundary?
   CalculateNextBoundary(photon, photon.CurrentPosition(), photon.UnitMomentum()); 
@@ -668,6 +703,22 @@ void Simulator::Reflect(Photon& photon)
 float Simulator::CalculateR(const std::vector<float>& pos)
 {
   return std::sqrt(pos[0]*pos[0] + pos[1]*pos[1]);
+}
+
+bool Simulator::Terminate(Photon& photon)
+{
+  // Roulette procedure
+  float rand = m_rouletteGenerator.Uniform(0,1);
+  if (photon.Weight() < m_terminationThreshold) 
+  {
+    if (rand <= 0.1) 
+    {
+      float weight = photon.Weight();
+      photon.SetWeight(weight/0.1);
+      return false;
+    }
+    else { photon.SetWeight(0.0); return true; }
+  } 
 }
 
 void Simulator::MakePlots(std::vector<TGraph*> stepGraphs)
@@ -696,5 +747,30 @@ void Simulator::MakePlots(std::vector<TGraph*> stepGraphs)
   c2.Write();
 
   m_depositionHist.Write();
+}
+
+void Simulator::UpdatePlot()
+{
+  // Open the file we created
+  TFile f(m_simulateOutputPath.c_str(), "UPDATE");
+
+  TCanvas *c1 = nullptr;
+  std::string name = "logLikelihood_CL_" + std::to_string(1);
+  f.GetObject(name.c_str(), c1);
+
+  if (!c1) std::cout << "Error. Could not find object named " << name << " in " << m_simulateOutputPath.c_str() << std::endl;
+
+  // Draw the true point
+  float x(0), y(0);
+  ConvertToCartesian(x, y, m_sourcePosition[0], m_sourcePosition[1]);
+  TMarker trueXY(x, y, 8);
+  trueXY.SetMarkerSize(2);
+  trueXY.SetMarkerColor(2);
+
+  c1->Draw();
+  trueXY.Draw("same");
+
+  c1->Write();
+  delete c1;
 }
 }

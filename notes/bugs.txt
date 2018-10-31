@@ -1,0 +1,2 @@
+photon.Weight() returns nan sometimes  (Potentially fixed)
+Maybe the sipms need to be the same thickness as disk??

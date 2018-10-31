@@ -58,7 +58,7 @@ void OutputConfigInfo(const wheel::Configuration& config)
   std::cout << "SiPM Wheel Configuration:\n";
  
   std::cout << "Process                " << config.process                        << std::endl
-            << "SimulateOutputPath     " << config.simulateOutputPath             << std::endl
+            << "SimulateOutputPath     " << config.recoOutputPath                 << std::endl
             << "NPhotonsToLaunch       " << config.nPhotonsToLaunch               << std::endl
             << "NumberOfSiPMs          " << config.nSiPMs                         << std::endl
             << "N0                     " << config.N0                             << std::endl
@@ -78,8 +78,7 @@ void OutputConfigInfo(const wheel::Configuration& config)
             << "TerminationThreshold   " << config.terminationThreshold           << std::endl
             << "MaxIterations          " << config.maxIterations                  << std::endl
             << "nVoxels                " << config.nVoxels                        << std::endl
-            << "attenuationLength      " << config.attenuationLength              << std::endl
-            << "recoOutputPath         " << config.recoOutputPath                 << std::endl;
+            << "attenuationLength      " << config.attenuationLength              << std::endl;
   std::cout << std::setfill('-') << std::setw(80) << "-" << std::setfill(' ') << std::endl;
   std::cout << std::endl;
 }
@@ -99,7 +98,7 @@ void ReadConfigFile(wheel::Configuration& config)
     std::getline(file, value);
 
     if      (header == "process")                 config.process = value; 
-    else if (header == "simulateOutputPath")      config.simulateOutputPath = value;
+    else if (header == "simulateOutputPath")      config.recoOutputPath = value;
     else if (header == "nSiPMs")                  config.nSiPMs = stoi(value);
     else if (header == "N0")                      config.N0     = stoi(value);
     else if (header == "reconstruct")             value == "true" ? config.reconstruct = true : config.reconstruct = false;
@@ -122,7 +121,6 @@ void ReadConfigFile(wheel::Configuration& config)
     else if (header == "maxIterations")           config.maxIterations         = std::stoi(value);
     else if (header == "nVoxels")                 config.nVoxels               = std::stoi(value);
     else if (header == "attenuationLength")       config.attenuationLength     = std::stof(value);
-    else if (header == "recoOutputPath")          config.recoOutputPath        = value;
     else    { std::cout << "Cannot identify " << header << std::endl; exit(1); }
   }
   
