@@ -32,6 +32,7 @@ Simulator::Simulator(const Configuration& config)
 {
   // So we don't have to keep passing config
   m_simulateOutputPath     = config.recoOutputPath;
+  m_recoAnaTreePath        = config.recoAnaTreePath;
   m_nSiPMs                 = config.nSiPMs;
   m_N0                     = config.N0;
   m_reconstruct            = config.reconstruct;

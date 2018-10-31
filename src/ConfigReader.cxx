@@ -37,7 +37,8 @@ void ConfigReader::ReadFile(Configuration& config)
     std::getline(file, value);
 
     if      (header == "process")                 config.process = value; 
-    else if (header == "simulateOutputPath")      config.recoOutputPath = value;
+    else if (header == "simulateOutputPath")      config.recoOutputPath  = value;
+    else if (header == "recoAnaTreePath")         config.recoAnaTreePath = value;
     else if (header == "nSiPMs")                  config.nSiPMs = stoi(value);
     else if (header == "N0")                      config.N0     = stoi(value);
     else if (header == "reconstruct")             value == "true" ? config.reconstruct = true : config.reconstruct = false;
@@ -128,6 +129,7 @@ void ConfigReader::OutputConfigInfo(const Configuration& config)
               << "RawWaveformsPath    " << config.rawWaveformPath                << std::endl
               << "ModWaveformsPath    " << config.modWaveformPath                << std::endl
               << "RecoOutputPath      " << config.recoOutputPath                 << std::endl
+              << "RecoAnaTreePath     " << config.recoAnaTreePath                << std::endl
               << "BaselineSubtract    " << config.baselineSubtract               << std::endl
               << "SmoothWaveform      " << config.smoothWaveform                 << std::endl
               << "SMARange            " << config.smaRange                       << std::endl
@@ -176,6 +178,7 @@ void ConfigReader::OutputConfigInfo(const Configuration& config)
   {
     std::cout << "Process                " << config.process                        << std::endl
               << "SimulateOutputPath     " << config.recoOutputPath                 << std::endl
+              << "RecoAnaTreePath        " << config.recoAnaTreePath                << std::endl
               << "NPhotonsToLaunch       " << config.nPhotonsToLaunch               << std::endl
               << "NumberOfSiPMs          " << config.nSiPMs                         << std::endl
               << "N0                     " << config.N0                             << std::endl

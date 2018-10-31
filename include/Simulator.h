@@ -117,6 +117,7 @@ private:
 
  
   std::string              m_simulateOutputPath;     ///< Output path for results
+  std::string              m_recoAnaTreePath;        ///< Output path for reconstruction results
   unsigned                 m_nSiPMs;                 ///< Number of sipms
   unsigned                 m_N0;                     ///< N p.e. constant for reco
   bool                     m_reconstruct;            ///< Option to reconstruct

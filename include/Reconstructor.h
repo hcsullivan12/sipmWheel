@@ -57,6 +57,13 @@ public:
   void  Initialize(const Configuration& config);
   void  MakePlot(const unsigned& trigger);
 
+
+  const double   ML()    { return m_mlLogLikelihood; }
+  const float    X()     { return m_mlX; }
+  const float    Y()     { return m_mlY; }
+  const float    R()     { return m_mlRadius; }
+  const float    Theta() { return m_mlTheta; }
+  const unsigned N0()    { return m_mlN0; }
     
 private:
 

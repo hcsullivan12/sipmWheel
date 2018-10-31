@@ -13,6 +13,7 @@
 #include <fstream>
 #include <experimental/filesystem>
 #include "TFile.h"
+#include "TNtuple.h"
 #include "Utilities.h"
 #include "FileReader.h"
 #include "Reconstructor.h"
@@ -59,14 +60,16 @@ int main(int argc, char **argv)
 void InitializeOutputFiles(const wheel::Configuration& config)
 {
   // Reconstruction output file
-  TFile f(config.recoOutputPath.c_str(), "RECREATE");
-  f.Close();
+  TFile f1(config.recoOutputPath.c_str(), "RECREATE");
+  f1.Close();
+  TFile f2(config.recoAnaTreePath.c_str(), "RECREATE");
+  f2.Close();
   
   // Waveform files
-  TFile f2(config.rawWaveformPath.c_str(), "RECREATE");
-  f2.Close();
-  TFile f3(config.modWaveformPath.c_str(), "RECREATE");
+  TFile f3(config.rawWaveformPath.c_str(), "RECREATE");
   f3.Close();
+  TFile f4(config.modWaveformPath.c_str(), "RECREATE");
+  f4.Close();
 }
 
 void Reconstruct(const wheel::Configuration& myConfig)
@@ -97,6 +100,8 @@ void Reconstruct(const wheel::Configuration& myConfig)
   if (myConfig.printFiles) PrintTheFiles(sipmToFilesMap);
 
   // Main workhourse here
+  // Create our ntuple
+  TNtuple data("ntuple","SiPM Wheel N-tuple","MLL:x:y:radius:theta:nphoton");
   // Start reco
   for (unsigned trigger = 1; trigger <= nFiles; trigger++)
   {
@@ -114,9 +119,24 @@ void Reconstruct(const wheel::Configuration& myConfig)
     } 
  
     // Start reconstruction
-    wheel::Reconstructor Reconstructor;
-    Reconstructor.Reconstruct(sipmToTriggerMap, sipmInfoMap, myConfig, trigger);
+    wheel::Reconstructor reconstructor;
+    reconstructor.Reconstruct(sipmToTriggerMap, sipmInfoMap, myConfig, trigger);
+
+    // Fill our ntuple
+    double   ml    = reconstructor.ML();
+    float    x     = reconstructor.X();
+    float    y     = reconstructor.Y();
+    float    r     = reconstructor.R();
+    float    theta = reconstructor.Theta();
+    unsigned N0    = reconstructor.N0();
+
+    data.Fill(ml, x, y, r, theta, N0);  
   }
+  
+  // Save our ntuple
+  TFile f(myConfig.recoAnaTreePath.c_str(), "UPDATE");
+  data.Write();
+  f.Close();
 }
 
 void FillSiPMInfo(wheel::SiPMInfoMap& sipmInfoMap, const wheel::Configuration& config)
