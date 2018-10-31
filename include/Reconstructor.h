@@ -1,13 +1,13 @@
 // 
-// File: Analyzer.h
+// File: Reconstructor.h
 //
 // Author: Hunter Sullivan
 //
 // Description: Structure to perfom reconstruction on sipm data.
 //
 
-#ifndef ANALYZER_H
-#define ANALYZER_H
+#ifndef RECONSTRUCTOR_H
+#define RECONSTRUCTOR_H
 
 #include "Utilities.h"
 #include "WaveformAlg.h"
@@ -45,11 +45,11 @@ private:
   double m_cb;
 };
 
-class Analyzer {
+class Reconstructor {
 
 public:
-  Analyzer();
-  ~Analyzer();
+  Reconstructor();
+  ~Reconstructor();
   
   void  Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const Configuration& config, const unsigned& trigger);
   void  Reconstruct(unsigned& N0);

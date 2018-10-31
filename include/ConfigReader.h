@@ -28,6 +28,7 @@ private:
 
   void RecordBiases(Configuration& config, const std::string& value);
   void RecordGains(std::map<unsigned, float>& map, const Configuration& config, const std::string& value);
+  void RecordPosition(Configuration& config, const std::string& value);
  
 };
 }
