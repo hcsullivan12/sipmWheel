@@ -1,12 +1,12 @@
 //
-// File: Analyzer.cxx
+// File: Reconstructor.cxx
 //
 // Author: Hunter Sullivan
 //
 // Description: Structure to run reconstruction on sipm data.
 //
 
-#include "Analyzer.h"
+#include "Reconstructor.h"
 #include "TMath.h"
 #include "TF1.h"
 #include "TF2.h"
@@ -27,13 +27,13 @@ Voxel::Voxel(const float& x, const float& y, const float& r, const float& theta)
 Voxel::~Voxel()
 {}
 
-Analyzer::Analyzer()
+Reconstructor::Reconstructor()
 {}
 
-Analyzer::~Analyzer()
+Reconstructor::~Reconstructor()
 {}
 
-void Analyzer::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const Configuration& config, const unsigned& trigger)
+void Reconstructor::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const Configuration& config, const unsigned& trigger)
 {
   // Initialize voxels and containers
   std::cout << "\nInitializing reconstruction...\n";  
@@ -50,7 +50,7 @@ void Analyzer::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap
   MakePlot(trigger);
 }
 
-void Analyzer::Initialize(const Configuration& config)
+void Reconstructor::Initialize(const Configuration& config)
 {
   // Initialize
   m_maxIterations     = config.maxIterations;
@@ -71,7 +71,7 @@ void Analyzer::Initialize(const Configuration& config)
   InitVoxelList();
 }
 
-void Analyzer::InitVoxelList()
+void Reconstructor::InitVoxelList()
 {
   // Since our geometry is a circle, loop through
   // x coordinate and y coordinate creating new voxels.
@@ -108,7 +108,7 @@ void Analyzer::InitVoxelList()
   }
 } 
 
-void Analyzer::Reconstruct(unsigned& N0)
+void Reconstructor::Reconstruct(unsigned& N0)
 {
   // The idea here is to first get a rough estimate of the MLE parameters by
   // a simple grid search (this will be modified based on the application to
@@ -159,7 +159,7 @@ void Analyzer::Reconstruct(unsigned& N0)
   std::cout << "Run time of " << duration << " s" << std::endl;
 }
 
-void Analyzer::Handle(const unsigned& N0)
+void Reconstructor::Handle(const unsigned& N0)
 {
   for (const auto& voxel : m_voxelList)
   {
@@ -180,7 +180,7 @@ void Analyzer::Handle(const unsigned& N0)
   }
 }
 
-double Analyzer::ComputeLogLikelihood(const float& x, const float& y, const unsigned& N0)
+double Reconstructor::ComputeLogLikelihood(const float& x, const float& y, const unsigned& N0)
 {
   // Convert x and y to polar coordinates 
   float r        = 0;
@@ -200,7 +200,7 @@ double Analyzer::ComputeLogLikelihood(const float& x, const float& y, const unsi
   return sum;
 }
 
-void Analyzer::ConvertToPolar(float& r, float& thetaDeg, const float& x, const float& y)
+void Reconstructor::ConvertToPolar(float& r, float& thetaDeg, const float& x, const float& y)
 {
   r        = std::sqrt(x*x + y*y);
   thetaDeg = TMath::ASin(std::abs(y/r))*180/TMath::Pi();
@@ -211,7 +211,7 @@ void Analyzer::ConvertToPolar(float& r, float& thetaDeg, const float& x, const f
   if (x > 0 && y < 0) thetaDeg = 360 - thetaDeg;
 }
 
-float Analyzer::ComputeLambda(const float& r, const float& thetaDeg, const unsigned& N0, const unsigned& sipm)
+float Reconstructor::ComputeLambda(const float& r, const float& thetaDeg, const unsigned& N0, const unsigned& sipm)
 { 
   // Assumptions:
   //    1) Only bulk absorption 
@@ -244,7 +244,7 @@ float Analyzer::ComputeLambda(const float& r, const float& thetaDeg, const unsig
   return weight;
 }
 
-void Analyzer::RefineEstimate(unsigned& iterator)
+void Reconstructor::RefineEstimate(unsigned& iterator)
 {
   // Make sure we haven't done this too many times
   iterator++;
@@ -356,7 +356,7 @@ void Analyzer::RefineEstimate(unsigned& iterator)
   RefineEstimate(iterator);
 }
 
-std::pair<unsigned, unsigned> Analyzer::InitData(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const unsigned& trigger)
+std::pair<unsigned, unsigned> Reconstructor::InitData(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const unsigned& trigger)
 { 
   // Which sipm saw the largest number of photons?
   unsigned maxSiPM;
@@ -393,7 +393,7 @@ std::pair<unsigned, unsigned> Analyzer::InitData(SiPMToTriggerMap& sipmToTrigger
   return std::make_pair(maxSiPM, total);
 }
 
-void Analyzer::MakePlot(const unsigned& trigger)
+void Reconstructor::MakePlot(const unsigned& trigger)
 {
   TFile f(m_recoOutputPath.c_str(), "UPDATE");
 

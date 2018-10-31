@@ -11,7 +11,7 @@
 #include "TFile.h"
 #include "TCanvas.h"
 #include "TF2.h"
-#include "Analyzer.h"
+#include "Reconstructor.h"
 
 namespace wheel {
 
@@ -32,6 +32,7 @@ Simulator::Simulator(const Configuration& config)
 {
   // So we don't have to keep passing config
   m_simulateOutputPath     = config.recoOutputPath;
+  m_recoAnaTreePath        = config.recoAnaTreePath;
   m_nSiPMs                 = config.nSiPMs;
   m_N0                     = config.N0;
   m_reconstruct            = config.reconstruct;
@@ -202,13 +203,13 @@ void Simulator::Simulate(const Configuration& config)
     data.emplace(8,70);*/
 
     // Initialize the main work horse for reconstruction
-    wheel::Analyzer analyzer;    
-    analyzer.Initialize(config);
-    analyzer.SetData(data);
+    wheel::Reconstructor reconstructor;    
+    reconstructor.Initialize(config);
+    reconstructor.SetData(data);
     // Begin!
-    analyzer.Reconstruct(max); 
+    reconstructor.Reconstruct(max); 
     // Plots
-    analyzer.MakePlot(1);
+    reconstructor.MakePlot(1);
     // Add the true point
     UpdatePlot();
   }

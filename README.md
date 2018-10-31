@@ -34,11 +34,10 @@ mkdir build
 cd build
 cmake ..
 make
-./sipmwheel <path_to_config_file>
 ```
-or 
+And one of following for the chosen process:
 ```
+./reconstruct <path_to_config_file>
+./characterize <path_to_config_file>
 ./simulate <path_to_config_file>
 ```
-
-Note: The characteriation and reconstruction plots are updated throughout the algorithm. So if you're starting a new run, you may need to delete the old files!

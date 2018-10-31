@@ -29,6 +29,7 @@ public:
                const std::string&   filename, 
                const float&         bias, 
                const unsigned&      channel, 
+               const unsigned&      trigger,
                const Configuration& config);
   // For reco  
   void ReadFiles(SiPMToTriggerMap&           sipmToTriggerMap, 
@@ -41,21 +42,11 @@ public:
                  const BiasToFileMap&        biasMap, 
                  const unsigned&             sipm, 
                  const wheel::Configuration& config);
-
- 
-  std::vector<TGraph>&  GetRawGraphs()  { return rawWaveforms; }
-  std::vector<TGraph>&  GetModGraphs()  { return modWaveforms; }
-  wheel::MarkerListVec& GetMarkers()    { return markers; }
   
 private:
 
-  void ReadFile(HitCandidateVec& hitCandidateVec, const std::string& filename, const float& bias, const unsigned& channel, const wheel::Configuration& config);
-  void MakeTheMarkers(const HitCandidateVec& hitCandVec);
-
-  std::vector<TGraph>  rawWaveforms;
-  std::vector<TGraph>  modWaveforms;
-  MarkerListVec        markers; 
-
+  void ReadFile(HitCandidateVec& hitCandidateVec, const std::string& filename, const float& bias, const unsigned& channel, const unsigned& trigger, const wheel::Configuration& config);
+  void MakeTheMarkers(const std::vector<float>& signal, const unsigned& channel, const unsigned& trigger, const HitCandidateVec& hitCandVec, const Configuration& config);
 };
 }
 

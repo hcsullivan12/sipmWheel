@@ -1,4 +1,3 @@
-// 
 // File: FileReader.cxx
 //
 // Author: Hunter Sullivan
@@ -7,6 +6,8 @@
 //
 
 #include "FileReader.h"
+#include "TCanvas.h"
+#include "TFile.h"
 
 namespace wheel {
 
@@ -54,7 +55,7 @@ void FileReader::ReadFiles(SiPMToTriggerMap&    sipmToTriggerMap,
       // Create a temp hitVec
       HitCandidateVec hitCandVec;
       // Now read this file
-      ReadFile(hitCandVec, file, bias.first, sipm, config);
+      ReadFile(hitCandVec, file, bias.first, sipm, counter, config);
       // Safety net to protect against division settings
       triggerList.emplace_back(hitCandVec);
     }
@@ -82,7 +83,7 @@ void FileReader::ReadFiles(SiPMToTriggerMap& sipmToTriggerMap,
     // There should only be one bias specified
     // Now read this file
     const std::string& file = *std::next(map.find(sipm.first)->second.begin(), trigger - 1);
-    ReadFile(hitCandVec, file, sipmInfoMap.find(sipm.first)->second.bias, sipm.first, config);
+    ReadFile(hitCandVec, file, sipmInfoMap.find(sipm.first)->second.bias, sipm.first, trigger, config);
     // Safety net to protect against division settings
     triggerList.emplace_back(hitCandVec);
     
@@ -94,7 +95,7 @@ void FileReader::ReadFiles(SiPMToTriggerMap& sipmToTriggerMap,
  *  The method extracts the waveform from the data file
  *
  */
-void FileReader::ReadFile(HitCandidateVec& hitCandidateVec, const std::string& filename, const float& bias, const unsigned& channel, const Configuration& config)
+void FileReader::ReadFile(HitCandidateVec& hitCandidateVec, const std::string& filename, const float& bias, const unsigned& channel, const unsigned& trigger, const Configuration& config)
 {
   // Open the file
   std::ifstream file(filename.c_str());
@@ -126,7 +127,7 @@ void FileReader::ReadFile(HitCandidateVec& hitCandidateVec, const std::string& f
   }
   
   // Analyze this waveform
-  Analyze(signal, hitCandidateVec, filename, bias, channel, config);
+  Analyze(signal, hitCandidateVec, filename, bias, channel, trigger, config);
 }
 
 /*
@@ -140,21 +141,32 @@ void FileReader::Analyze(std::vector<float>&  signal,
                          const std::string&   filename, 
                          const float&         bias, 
                          const unsigned&      channel, 
+                         const unsigned&      trigger,
                          const Configuration& config)
 {
   // Raw waveform: Only allow to store a few
-  if (config.saveRawWaveforms && rawWaveforms.size() < 30)
+  if (config.process == "reco" && config.saveRawWaveforms)
   {
     TGraph g(signal.size());
-    g.SetNameTitle(filename.c_str(), filename.c_str());
-    unsigned sample = 1;
+    std::string name = "Trigger" + std::to_string(trigger) + "_Channel" + std::to_string(channel);
+    g.SetNameTitle(name.c_str(), name.c_str());
+
+    unsigned tick(0);
     for (const auto& amp : signal)
     {
-      g.SetPoint(sample, sample - 1, amp);
-      sample++;
+      g.SetPoint(tick, tick, amp);
+      tick++;
     }
-    rawWaveforms.push_back(g);
+ 
+    TCanvas c(name.c_str(), name.c_str(), 500, 500);
+    g.Draw();   
+
+    // Add to our output file
+    TFile f(config.rawWaveformPath.c_str(), "UPDATE");
+    g.Write();
+    f.Close();
   }
+
   // Smooth the waveform
   WaveformAlg waveformAlg; 
   if (config.smoothWaveform) waveformAlg.SmoothWaveform(signal, config); 
@@ -162,40 +174,18 @@ void FileReader::Analyze(std::vector<float>&  signal,
   // Let's do the hit finding now
   HitCandidateVec      hitCandVec;
   MergeHitCandidateVec mergedHitsVec;
-  //waveformAlg.FindHits(signal, channel, bias, hitCandVec, config);
   waveformAlg.FindHitCandidates(signal, 0, channel, bias, hitCandVec, config);
-  //waveformAlg.MergeHitCandidates(signal, hitCandVec, mergedHitsVec); 
-  // New container for our hits
-  //HitCandidateVec hitCandVecFits;
-  //waveformAlg.ApplyFits(hitCandVecFits, mergedHitsVec);
-
-  // Modified waveform: Only allow to store a few
-  if (config.saveModWaveforms && modWaveforms.size() < 30)
-  {
-    TGraph g(signal.size());
-    g.SetNameTitle(filename.c_str(), filename.c_str());
-    unsigned sample = 1;
-    for (const auto& amp : signal)
-    {
-      g.SetPoint(sample, sample - 1, amp);
-      sample++;
-    }
-    modWaveforms.push_back(g);
-  }
-  //std::cout << "Found: " << hitCandVec.size() << " hits. " << std::endl;
-  // Append
+  
+  // Append the hits
   hitCandidateVec.insert(hitCandidateVec.end(), hitCandVec.begin(), hitCandVec.end());
+
   // Make the markers for the graphs
-  if (config.saveModWaveforms && modWaveforms.size() <= 30) MakeTheMarkers(hitCandVec);
+  if (config.process == "reco" && config.saveModWaveforms) MakeTheMarkers(signal, channel, trigger, hitCandVec, config);
 }
 
-/*
- *  This method creates the markers for the graphs.
- *
- */
-
-void FileReader::MakeTheMarkers(const HitCandidateVec& hitCandVec)
+void FileReader::MakeTheMarkers(const std::vector<float>& signal, const unsigned& channel, const unsigned& trigger, const HitCandidateVec& hitCandVec, const Configuration& config)
 {
+  // Make the markers first
   std::list<TMarker> mks;
   for (const auto& hit : hitCandVec)
   {
@@ -213,7 +203,26 @@ void FileReader::MakeTheMarkers(const HitCandidateVec& hitCandVec)
     mks.emplace_back(mMin);
     mks.emplace_back(mPeak);
   } 
-  markers.push_back(mks);
+  
+  // Now write the waveforms
+  TGraph g(signal.size());
+  std::string name = "Trigger" + std::to_string(trigger) + "_Channel" + std::to_string(channel);
+  g.SetNameTitle(name.c_str(), name.c_str());
+  unsigned tick(0);
+  for (const auto& amp : signal)
+  {
+    g.SetPoint(tick, tick, amp);
+    tick++;
+  }
+
+  TCanvas c(name.c_str(), name.c_str(), 500, 500);
+  g.Draw("");
+  for (auto& m : mks) m.Draw("same");
+    
+  // Add to our output file
+  TFile f(config.modWaveformPath.c_str(), "UPDATE");
+  c.Write();
+  f.Close();
 }
 }
 
