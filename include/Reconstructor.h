@@ -67,13 +67,19 @@ public:
     
 private:
 
-  std::pair<unsigned, unsigned> InitData(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const unsigned& trigger);
+  unsigned InitData(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const unsigned& trigger);
   double   ComputeLogLikelihood(const float& x, const float& y, const unsigned& N0);
   float    ComputeLambda(const float& r, const float& theta, const unsigned& N0, const unsigned& m);
+  double   ComputeLogFactorial(const unsigned& counts);
   void     Handle(const unsigned& N0);
   void     InitVoxelList();
   void     ConvertToPolar(float& r, float& thetaDeg, const float& x, const float& y);
-  void     RefineEstimate(unsigned& iterator);
+  void     NREstimate(unsigned& iterator);
+  void     NREstimate(float&    guessX,
+                      float&    guessY,
+                      float&    guessN0,
+                      float&    guessMLogL,
+                      unsigned& iterator);
  
   double                       m_mlLogLikelihood; //< Log likelihood for the MLE
   float                        m_mlN0;            //< MLE for N0
@@ -81,11 +87,6 @@ private:
   float                        m_mlY;             //< MLE for y (cm)
   float                        m_mlRadius;        //< MLE for r (cm)
   float                        m_mlTheta;         //< MLE for theta (deg)
-
-  float                        m_oldGuessX;       //< old estimate for x in NR method
-  float                        m_oldGuessY;       //< old estimate for y in NR method
-  float                        m_oldGuessN0;      //< old estimate for N0 in NR method
-  double                       m_oldGuessMLogL;   //< old estimate for log likelihood in NR method
 
   float                        m_beta;            
   float                        m_diskRadius;
@@ -96,6 +97,7 @@ private:
   std::list<Voxel>             m_voxelList;          //< list of created voxels
   std::map<unsigned, unsigned> m_data;               //< measured counts (sipm, np.e.)
   unsigned                     m_maxCounts;          //< maximum number of p.e., used for plotting
+  unsigned                     m_maxSiPM;            //< sipm ID which saw maxCounts
   std::string                  m_recoOutputPath;     //< output file for plots
 };
 }

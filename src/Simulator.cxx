@@ -78,22 +78,17 @@ void Simulator::Simulate(const Configuration& config)
 {
   // **Steps for this algorithm**
   //
-  //  1) Emit photons from source position according to some angular distribution.
-  //     (Maybe take photon wavelength from TPB emission distribution as well!, but how to include into propogation?)
-  //     This initializes directions for each photon.
-  //  2) Get step size from exponontial distribution with bulk absorption length.
-  //     if step size < distance to disk surface, we lost it!
-  //  3) Check angle of incidence with critical angle
-  //     (Maybe take angle of incidence as gaussian to model imperfect surface, quasispecular)
-  //     if angle of incidence >= critical, R=1
-  //     else calculate Reflection coeffiecent 
-  //     REPEAT!
-  //
-  //     Check the positions of photons at each step
-  //     if photon position = area of sipm, terminate
-  //     if photon weight < threshold, we lost it!
-  //
-  //     The sum of the photon weights captured is the gives the probability of detection at the sipm
+  //  1) Emit photons from source position! Assume Gaussian beam profile
+  //     centered on source position, and tpb emission direction assumed
+  //     uniform.
+  //  2) Get step size from exponential distribution parameterized by
+  //     bulk absorption length. If step size smaller than distance to
+  //     to next boundary, absorb, then step again! Otherwise, reflect
+  //     off next boundary.
+  //  3) Check angle of incidence with critical angle. Assume rough surface.
+  //     If angle of incidence >= critical, R=1. Otherwise, calculate 
+  //     reflection coefficient. Compute outgoing momentum, then
+  //     step!
   //  
 
   // Initialize sipms
