@@ -10,14 +10,13 @@ find_package(ROOT COMPONENTS REQUIRED)
 include_directories(${ROOT_INCLUDE_DIRS})
 add_definitions(${ROOT_CXX_FLAGS})
 
-set(INCLUDE_DIRECTORIES ${ROOT_INCLUDE_DIR})
-include_directories( ${INCLUDE_DIRECTORIES})
-set(LINK_DIRECTORIES ${ROOT_LIBRARY_DIR})
-link_directories( ${LINK_DIRECTORIES})
+include_directories( ${ROOT_LIBRARY_DIR})
+link_directories( ${ROOT_LIBRARY_DIR})
 
 link_libraries(stdc++fs)
 
-include_directories(${PROJECT_SOURCE_DIR}/include)
+set(SIPMWHEEL_INCLUDE ${PROJECT_SOURCE_DIR}/include)
+include_directories(${SIPMWHEEL_INCLUDE})
 
 file(GLOB_RECURSE sources ${PROJECT_SOURCE_DIR}/src/*.cxx)
 file(GLOB_RECURSE headers ${PROJECT_SOURCE_DIR}/include/*.h)

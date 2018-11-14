@@ -17,6 +17,8 @@
 #include "TGraph.h"
 #include "TLegend.h"
 #include "TBackCompFitter.h"
+#include "TDecompSVD.h"
+#include "TMatrixDSym.h"
 
 namespace wheel {
 
@@ -39,10 +41,9 @@ void Reconstructor::Reconstruct(SiPMToTriggerMap& sipmToTriggerMap, const SiPMIn
   std::cout << "\nInitializing reconstruction...\n";  
   Initialize(config);
 
-  // First to cound number of photons in each hit
+  // First to count number of photons in each hit
   // also N0 set to lower threshold to decrease computation time
-  const auto maxSiPM_counts = InitData(sipmToTriggerMap, sipmInfoMap, trigger);
-  unsigned N0 = maxSiPM_counts.second;
+  unsigned N0 = InitData(sipmToTriggerMap, sipmInfoMap, trigger);
 
   // Start reconstruction
   Reconstruct(N0);
@@ -124,11 +125,12 @@ void Reconstructor::Reconstruct(unsigned& N0)
 
   // Start main loop
   // We will cover the entire parameter space, at the expense of computation time
-  // Once N0 is calculated, we'll use Newton-Raphson to better approximate x and y
-  while (N0 <= 5000) 
+  // Once N0 is calculated, we'll use Newton-Raphson to better approximate x, y, and N0
+  unsigned max = N0;
+  while (N0 <= 20*max) 
   {
     Handle(N0);
-    N0 = N0+3;
+    N0 = N0+10;
   }
  
   // We should have the ml now
@@ -141,22 +143,19 @@ void Reconstructor::Reconstruct(unsigned& N0)
 
   // Refine the estimation
   unsigned iterator(0);
-  std::cout << "\nRefining estimate...\n";
-  // Set our initial guesses
-  m_oldGuessX      = m_mlX;
-  m_oldGuessY      = m_mlY;
-  m_oldGuessMLogL  = m_mlLogLikelihood; 
-  RefineEstimate(iterator);
+  std::cout << "\nApplying NR estimate...\n";
+  NREstimate(iterator);
 
   std::cout << "Max log likelihood = " << m_mlLogLikelihood << std::endl
             << "X                  = " << m_mlX             << " cm\n"
             << "Y                  = " << m_mlY             << " cm\n"
             << "Radius             = " << m_mlRadius        << " cm\n"
-            << "Theta              = " << m_mlTheta         << " deg\n";
+            << "Theta              = " << m_mlTheta         << " deg\n"
+            << "N0                 = " << m_mlN0            << " photons\n";
  
   clock_t end = clock();
   double duration = ((double) (end - start)) / CLOCKS_PER_SEC;
-  std::cout << "Run time of " << duration << " s" << std::endl;
+  std::cout << "\nRun time of " << duration << " s" << std::endl;
 }
 
 void Reconstructor::Handle(const unsigned& N0)
@@ -166,10 +165,10 @@ void Reconstructor::Handle(const unsigned& N0)
     // Log likelihood for this parameter set
     double logLikelihood = ComputeLogLikelihood(voxel.X(), voxel.Y(), N0);
 
-    //std::cout << logLikelihood << std::endl;
+//    std::cout << logLikelihood << std::endl;
 
     if (logLikelihood > m_mlLogLikelihood) 
-    { 
+    {
       m_mlLogLikelihood = logLikelihood; 
       m_mlN0            = N0; 
       m_mlX             = voxel.X(); 
@@ -183,19 +182,32 @@ void Reconstructor::Handle(const unsigned& N0)
 double Reconstructor::ComputeLogLikelihood(const float& x, const float& y, const unsigned& N0)
 {
   // Convert x and y to polar coordinates 
-  float r        = 0;
-  float thetaDeg = 0;
+  float r(0);
+  float thetaDeg(0);
   ConvertToPolar(r, thetaDeg, x, y);  
 
   // Sum over terms ----> k_m*ln(lambda_m) - lambda_m - ln(k_m!)
   double sum = 0;
   for (int sipm = 1; sipm <= m_nSiPMs; sipm++) 
   {
-    float lambda_m = ComputeLambda(r, thetaDeg, N0, sipm);
-    //std::cout << "nPhotons: " << m_data.find(sipm)->second << "  lambda_m " << lambda_m << "   factorial " << TMath::Factorial(m_data.find(sipm)->second) << "  term ";
-    double term = m_data.find(sipm)->second*log(lambda_m) - lambda_m - log(TMath::Factorial(m_data.find(sipm)->second));
-    //std::cout << term << std::endl;
+    float    lambda_m = ComputeLambda(r, thetaDeg, N0, sipm);
+    unsigned k_m      = m_data.find(sipm)->second;
+ 
+    // Since we may be dealing with large numbers here, we need to handle the factorial carefully
+    double term = k_m*std::log(lambda_m) - lambda_m - ComputeLogFactorial(k_m);
     sum = sum + term;
+  }
+  if (sum > 0) std::cout << "Ahh\n";
+
+  return sum;
+}
+
+double Reconstructor::ComputeLogFactorial(const unsigned& counts)
+{
+  float sum(0);
+  for (unsigned n = 1; n <= counts; n++)
+  {
+    sum = sum + std::log(n);
   }
   return sum;
 }
@@ -240,123 +252,171 @@ float Reconstructor::ComputeLambda(const float& r, const float& thetaDeg, const 
   float cosAngleSiPMToXYandSiPM(1);
   if (sipmToXY != 0) cosAngleSiPMToXYandSiPM = (-r*r + sipmToXYSquared + m_diskRadius*m_diskRadius)/(2*sipmToXY*m_diskRadius);
  
-  float weight = N0*cosAngleSiPMToXYandSiPM*TMath::Exp(-sipmToXY/m_attenuationLength)/sipmToXY;
+  float weight = N0*cosAngleSiPMToXYandSiPM*TMath::Exp(-sipmToXY*sipmToXY/(m_attenuationLength*m_attenuationLength));///sipmToXY;
   return weight;
 }
 
-void Reconstructor::RefineEstimate(unsigned& iterator)
+void Reconstructor::NREstimate(unsigned& iterator)
+{
+  // Make our initial guess
+  // This will be:
+  // 
+  // r     = R/2
+  // theta = angleOfSiPM
+  // N0    = 10*m_maxCounts 
+   
+  float angleOfSiPMDeg = (m_maxSiPM - 1)*m_beta;
+ 
+  float guessX     = (m_diskRadius/2.0)*TMath::Cos(angleOfSiPMDeg*TMath::Pi()/180);
+  float guessY     = (m_diskRadius/2.0)*TMath::Sin(angleOfSiPMDeg*TMath::Pi()/180);
+  float guessN0    = m_mlN0;
+  float guessMLogL = ComputeLogLikelihood(guessX, guessY, guessN0); 
+
+  NREstimate(guessX, guessY, guessN0, guessMLogL, iterator);
+}
+
+void Reconstructor::NREstimate(float&    guessX, 
+                               float&    guessY, 
+                               float&    guessN0, 
+                               float&    guessMLogL, 
+                               unsigned& iterator)
 {
   // Make sure we haven't done this too many times
   iterator++;
   if (iterator > m_maxIterations) 
   {
-    std::cout << "NOTE: Was not able to refine estimate in " << m_maxIterations << " iterations!" << std::endl;
+    std::cout << "NOTE: Attempted " << m_maxIterations << " iterations!" << std::endl;
     return;
   }
 
   // We will apply the Newton-Raphson method to
-  // refine our estimate! We will take N0 as that
-  // estimated from the "Handle" stage.
+  // maximize likelihood.
   //
   // We will use:
   //
   // V_n+1 = V_n - [l''(V_n)]^-1 * l'(V_n)
   //
 
-  // We first need to calculate our derivatives
+  // We first need to estimate our derivatives
   // As h --> 0...
-  const float h = 0.0001;
+  // We need two here 
+  const float h = 0.1;
+  const float h1 = 0.5; 
 
   // dl/dx
-  double l1   = ComputeLogLikelihood(m_mlX+h, m_mlY, m_mlN0);
-  double dldx = (l1 - m_mlLogLikelihood)/h;
+  double l1   = ComputeLogLikelihood(guessX+h, guessY, guessN0);
+  double dldx = (l1 - guessMLogL)/h;
 
   // dl/dy
-  double l2 = ComputeLogLikelihood(m_mlX, m_mlY+h, m_mlN0);
-  double dldy = (l2 - m_mlLogLikelihood)/h;
+  double l2   = ComputeLogLikelihood(guessX, guessY+h, guessN0);
+  double dldy = (l2 - guessMLogL)/h;
+
+  // dl/dN0
+  double l3    = ComputeLogLikelihood(guessX, guessY, guessN0+h);
+  double dldN0 = (l3 - guessMLogL)/h;
 
   // d2l/dx2
-  double l4 = ComputeLogLikelihood(m_mlX-h, m_mlY, m_mlN0);
-  double l5 = ComputeLogLikelihood(m_mlX+h, m_mlY, m_mlN0);
-  double d2ldx2 = (l4 - 2*m_mlLogLikelihood + l5)/(h*h);
+  double l4 = ComputeLogLikelihood(guessX+h, guessY, guessN0);
+  double l5 = ComputeLogLikelihood(guessX-h, guessY, guessN0);
+  double d2ldx2 = (l4 - 2*guessMLogL + l5)/(h*h);
 
   // d2l/dy2
-  double l6 = ComputeLogLikelihood(m_mlX, m_mlY-h, m_mlN0);
-  double l7 = ComputeLogLikelihood(m_mlX, m_mlY+h, m_mlN0);
-  double d2ldy2 = (l6 - 2*m_mlLogLikelihood + l7)/(h*h);
+  double l6 = ComputeLogLikelihood(guessX, guessY+h, guessN0);
+  double l7 = ComputeLogLikelihood(guessX, guessY-h, guessN0);
+  double d2ldy2 = (l6 - 2*guessMLogL + l7)/(h*h);
+
+  // d2l/dN02
+  double l8 = ComputeLogLikelihood(guessX, guessY, guessN0+h1);
+  double l9 = ComputeLogLikelihood(guessX, guessY, guessN0-h1);
+  double d2ldN02 = (l8 - 2*guessMLogL + l9)/(h1*h1);
 
   // d2l/dxdy
-  double l10 = ComputeLogLikelihood(m_mlX+h, m_mlY+h, m_mlN0);
-  double l11 = ComputeLogLikelihood(m_mlX+h, m_mlY-h, m_mlN0);
-  double l12 = ComputeLogLikelihood(m_mlX-h, m_mlY+h, m_mlN0);
-  double l13 = ComputeLogLikelihood(m_mlX-h, m_mlY-h, m_mlN0);
-  double d2ldxdy = (l10 - l11 - l12 + l13)/(h*h);
+  double l10 = ComputeLogLikelihood(guessX+h, guessY+h, guessN0);
+  double l11 = ComputeLogLikelihood(guessX+h, guessY-h, guessN0);
+  double l12 = ComputeLogLikelihood(guessX-h, guessY+h, guessN0);
+  double l13 = ComputeLogLikelihood(guessX-h, guessY-h, guessN0);
+  double d2ldxdy = (l10 - l11 - l12 + l13)/(4*h*h);
 
-  // Now we can form our Fisher matrix
-  TArrayD data1(2);
-  data1[0] = dldx; data1[1] = dldy;
+  // d2l/dxdN0
+  double l14 = ComputeLogLikelihood(guessX+h, guessY, guessN0+h1);
+  double l15 = ComputeLogLikelihood(guessX+h, guessY, guessN0-h1);
+  double l16 = ComputeLogLikelihood(guessX-h, guessY, guessN0+h1);
+  double l17 = ComputeLogLikelihood(guessX-h, guessY, guessN0-h1);
+  double d2ldxdN0 = (l14 - l15 - l16 + l17)/(4*h*h1);
 
-  TArrayD data2(4);
-  data2[0] = d2ldx2;
-  data2[1] = d2ldxdy;
-  data2[2] = d2ldxdy;
-  data2[3] = d2ldy2;
+  // d2l/dydN0
+  double l18 = ComputeLogLikelihood(guessX, guessY+h, guessN0+h1);
+  double l19 = ComputeLogLikelihood(guessX, guessY+h, guessN0-h1);
+  double l20 = ComputeLogLikelihood(guessX, guessY-h, guessN0+h1);
+  double l21 = ComputeLogLikelihood(guessX, guessY-h, guessN0-h1);
+  double d2ldydN0 = (l18 - l19 - l20 + l21)/(4*h1*h1);
 
-  TMatrixD lPVector(2,1);
-  lPVector.SetMatrixArray(data1.GetArray());
-  TMatrixD fisherMatrix(2,2);
-  fisherMatrix.SetMatrixArray(data2.GetArray());
+  // Now we can form the Hessian matrix 
+  TMatrixD gradVec(3,1);
+  TArrayD  gradArr(3);
+  gradArr[0] = dldx; 
+  gradArr[1] = dldy; 
+  gradArr[2] = dldN0;
+  gradVec.SetMatrixArray(gradArr.GetArray());
 
-  // Try to invert the matrix
-  TDecompLU lu(fisherMatrix);
-  TMatrixD inverseFisherMatrix = fisherMatrix;
-  if (!lu.Decompose()) 
-  {
-    std::cout << "Decomposition failed, matrix singular!!" << std::endl;
-    return;
-  }
-  else lu.Invert(inverseFisherMatrix);
+  TMatrixD hessianMatrix(3,3);
+  TArrayD  hessianArr(9);
+  hessianArr[0] = d2ldx2;
+  hessianArr[1] = d2ldxdy;
+  hessianArr[2] = d2ldxdN0;
+  hessianArr[3] = d2ldxdy;
+  hessianArr[4] = d2ldy2;
+  hessianArr[5] = d2ldydN0;
+  hessianArr[6] = d2ldxdN0;
+  hessianArr[7] = d2ldydN0;
+  hessianArr[8] = d2ldN02;
+  hessianMatrix.SetMatrixArray(hessianArr.GetArray());
+ 
+  TDecompSVD svd(hessianMatrix);
+  auto inverseHessianMatrix = hessianMatrix;
+  svd.Invert(inverseHessianMatrix);
 
-  // Multiply inverse Fisher and vector
-  auto m = inverseFisherMatrix*lPVector;
+  // Multiply inverse Hessian and vector
+  auto m = inverseHessianMatrix*gradVec;
 
-  // Our convention --> x, y
-  float newGuessX     = m_oldGuessX - m[0][0];
-  float newGuessY     = m_oldGuessY - m[1][0];
+  // What's are new guesses?
+  float newGuessX     = guessX  - m[0][0];
+  float newGuessY     = guessY  - m[1][0];
+  float newGuessN0    = guessN0 - m[2][0];
+  float newGuessMLogL = ComputeLogLikelihood(newGuessX, newGuessY, newGuessN0);
+
   float newGuessR(0), newGuessT(0);
   ConvertToPolar(newGuessR, newGuessT, newGuessX, newGuessY);
   
   // Make sure r is not > disk radius
-  if (newGuessR >= m_diskRadius) { std::cout << "\n!!!!Caution: Estimate went out of bounds!!!!\n"; return; }
-  double newGuessMLogL = ComputeLogLikelihood(newGuessX, newGuessY, m_mlN0);
- 
-  // We want the eigenvalues and eigenvectors
-  // Not sure why we're getting warnings here
-  // These are symmetric matrices...
-  // Nonetheless, this seems to be returning the correct values
-  TVectorD eigenvalues(2);
-  TMatrixD eigenvectors = inverseFisherMatrix.EigenVectors(eigenvalues); 
+  if (newGuessR >= m_diskRadius) { std::cout << "\n!!!!Caution: Estimate went out of bounds!!!!\n\n"; return; }
+  
+  // Check if mag(gradLogL) < tolerance
+  float magGrad = std::sqrt(gradVec[0][0]*gradVec[0][0] + gradVec[1][0]*gradVec[1][0] + gradVec[2][0]*gradVec[2][0]);
+  if (magGrad < 0.01)
+  {
+    // We need to apply second derivative test here
+    float D1 = d2ldx2;
+    float D2 = d2ldx2*d2ldy2 - d2ldxdy*d2ldxdy;
+    float D3 = hessianMatrix.Determinant();
 
-  // Check the eigenvalues and convergence 
-  if (//eigenvalues[0] < 0 && eigenvalues[1] < 0 &&
-      newGuessMLogL  < m_oldGuessMLogL) 
-  { 
-    // Update
-    //m_mlX             = newGuessX;
-    //m_mlY             = newGuessY;
-    //ConvertToPolar(m_mlRadius, m_mlTheta, m_mlX, m_mlY);
-    //m_mlLogLikelihood = newGuessMLogL;
-    
-    return; 
+    // Also check signs of second derivatives
+    if (D1 < 0 && D2 > 0 && D3 < 0)
+    {
+      // Update
+      m_mlX             = newGuessX;
+      m_mlY             = newGuessY;
+      m_mlN0            = newGuessN0;
+      ConvertToPolar(m_mlRadius, m_mlTheta, m_mlX, m_mlY);
+      m_mlLogLikelihood = newGuessMLogL;
+      return; 
+    }
   }
   // Otherwise, keep searching
-  m_oldGuessX     = newGuessX;
-  m_oldGuessY     = newGuessY;
-  m_oldGuessMLogL = newGuessMLogL;
-  RefineEstimate(iterator);
+  NREstimate(newGuessX, newGuessY, newGuessN0, newGuessMLogL, iterator);
 }
 
-std::pair<unsigned, unsigned> Reconstructor::InitData(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const unsigned& trigger)
+unsigned Reconstructor::InitData(SiPMToTriggerMap& sipmToTriggerMap, const SiPMInfoMap& sipmInfoMap, const unsigned& trigger)
 { 
   // Which sipm saw the largest number of photons?
   unsigned maxSiPM;
@@ -389,8 +449,9 @@ std::pair<unsigned, unsigned> Reconstructor::InitData(SiPMToTriggerMap& sipmToTr
 
   // For use later on
   m_maxCounts = max;
+  m_maxSiPM   = maxSiPM;
 
-  return std::make_pair(maxSiPM, total);
+  return total;
 }
 
 void Reconstructor::MakePlot(const unsigned& trigger)
@@ -420,7 +481,7 @@ void Reconstructor::MakePlot(const unsigned& trigger)
       if (diff > 10.0) diff = 10;  
       if (r > m_diskRadius) diff = 0;
       logLikelihoodDist.SetBinContent(xBin, yBin, diff);
-      if (r > (m_diskRadius - 2)) diff = 10;
+      if (r > (m_diskRadius - 0.5)) diff = 10;
       contour68.SetBinContent(xBin, yBin, diff);
     }
   }  
