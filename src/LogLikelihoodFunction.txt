@@ -1,0 +1,21 @@
+//
+// File: LogLikelihoodFunction.cxx
+//
+// Author: Hunter Sullivan
+//
+// Description: Structure for log likelihood function.
+//
+
+#include "LogLikelihoodFunction.h"
+#include "TMath.h"
+
+namespace wheel {
+
+LogLikelihoodFunction::LogLikelihoodFunction()
+{}
+
+LogLikelihoodFunction::~LogLikelihoodFunction()
+{}
+
+}
+

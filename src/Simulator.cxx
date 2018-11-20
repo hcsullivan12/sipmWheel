@@ -200,7 +200,7 @@ void Simulator::Simulate(const Configuration& config)
     // Initialize the main work horse for reconstruction
     wheel::Reconstructor reconstructor;    
     reconstructor.Initialize(config);
-    reconstructor.SetData(data);
+    reconstructor.SetData(config, data);
     // Begin!
     reconstructor.Reconstruct(max); 
     // Plots

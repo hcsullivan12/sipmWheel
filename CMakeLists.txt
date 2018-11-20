@@ -6,7 +6,7 @@ add_definitions(-DVERSION="v01_00_09")
 set(CMAKE_CXX_STANDARD 11)
 
 list(APPEND CMAKE_MODULE_PATH $ENV{ROOTSYS}/etc/cmake)
-find_package(ROOT COMPONENTS REQUIRED)
+find_package(ROOT REQUIRED COMPONENTS)
 include_directories(${ROOT_INCLUDE_DIRS})
 add_definitions(${ROOT_CXX_FLAGS})
 

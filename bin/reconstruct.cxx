@@ -126,7 +126,7 @@ void Reconstruct(const wheel::Configuration& myConfig)
     double   ml    = reconstructor.ML();
     float    x     = reconstructor.X();
     float    y     = reconstructor.Y();
-    float    r     = reconstructor.R();
+    float    r     = reconstructor.Radius();
     float    theta = reconstructor.Theta();
     unsigned N0    = reconstructor.N0();
 
